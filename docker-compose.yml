@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Backend API
+  backend:
+    build:
+      context: ./src/be
+      dockerfile: Dockerfile
+    container_name: hoptranscribe-api
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - OpenAI__ApiKey=${OPENAI_API_KEY}
+      - OpenAI__TimeoutSeconds=30
+      - OpenAI__Voice=alloy
+      - AllowedOrigins__0=http://localhost:3000
+      - AllowedOrigins__1=http://localhost
+    volumes:
+      - backend-logs:/app/logs
+    networks:
+      - hoptranscribe-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend React App
+  frontend:
+    build:
+      context: ./src/fe
+      dockerfile: Dockerfile
+    container_name: hoptranscribe-web
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - hoptranscribe-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  hoptranscribe-network:
+    driver: bridge
+
+volumes:
+  backend-logs:
+    driver: local

@@ -1,0 +1,6 @@
+@HOPTranscribe_HostAddress = http://localhost:5138
+
+GET {{HOPTranscribe_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

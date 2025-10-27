@@ -1,0 +1,13 @@
+bin/
+obj/
+logs/
+.git
+.gitignore
+.env
+.env.local
+*.log
+.DS_Store
+.vscode/
+.idea/
+README.md
+appsettings.Development.json

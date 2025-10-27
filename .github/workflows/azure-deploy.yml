@@ -1,0 +1,192 @@
+name: Build and Deploy to Azure
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_RESOURCE_GROUP: hoptranscribe-rg
+  AZURE_LOCATION: eastus
+  FRONTEND_IMAGE_NAME: hoptranscribe-fe
+  BACKEND_IMAGE_NAME: hoptranscribe-be
+  ACR_NAME: hoptranscribeacr
+  
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.ACR_NAME }}.azurecr.io
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+    
+    - name: Build and push Backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/be
+        file: ./src/be/Dockerfile
+        push: true
+        tags: |
+          ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+          ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
+        cache-from: type=registry,ref=${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:buildcache,mode=max
+    
+    - name: Build and push Frontend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/fe
+        file: ./src/fe/Dockerfile
+        push: true
+        tags: |
+          ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+          ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
+        cache-from: type=registry,ref=${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:buildcache,mode=max
+
+  deploy-to-aci:
+    name: Deploy to Azure Container Instances
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Deploy Backend to ACI
+      uses: azure/aci-deploy@v1
+      with:
+        resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
+        name: hoptranscribe-api
+        image: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+        registry-login-server: ${{ env.ACR_NAME }}.azurecr.io
+        registry-username: ${{ secrets.ACR_USERNAME }}
+        registry-password: ${{ secrets.ACR_PASSWORD }}
+        dns-name-label: hoptranscribe-api-${{ github.run_number }}
+        ports: 8080
+        cpu: 1
+        memory: 1.5
+        environment-variables: |
+          ASPNETCORE_ENVIRONMENT=Production
+          OpenAI__ApiKey=${{ secrets.OPENAI_API_KEY }}
+          OpenAI__TimeoutSeconds=30
+          OpenAI__Voice=alloy
+          AllowedOrigins__0=https://hoptranscribe-web-${{ github.run_number }}.eastus.azurecontainer.io
+        secure-environment-variables: |
+          OpenAI__ApiKey=${{ secrets.OPENAI_API_KEY }}
+    
+    - name: Deploy Frontend to ACI
+      uses: azure/aci-deploy@v1
+      with:
+        resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
+        name: hoptranscribe-web
+        image: ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+        registry-login-server: ${{ env.ACR_NAME }}.azurecr.io
+        registry-username: ${{ secrets.ACR_USERNAME }}
+        registry-password: ${{ secrets.ACR_PASSWORD }}
+        dns-name-label: hoptranscribe-web-${{ github.run_number }}
+        ports: 80
+        cpu: 0.5
+        memory: 0.5
+        environment-variables: |
+          VITE_API_URL=https://hoptranscribe-api-${{ github.run_number }}.eastus.azurecontainer.io:8080
+
+    - name: Azure logout
+      run: az logout
+      if: always()
+
+  deploy-to-aca:
+    name: Deploy to Azure Container Apps (Alternative)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && false  # Set to true to enable ACA deployment
+    
+    steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Create or Update Container Apps Environment
+      run: |
+        az containerapp env create \
+          --name hoptranscribe-env \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --location ${{ env.AZURE_LOCATION }} \
+          --logs-destination none \
+          || echo "Environment already exists"
+    
+    - name: Deploy Backend to ACA
+      run: |
+        az containerapp create \
+          --name hoptranscribe-api \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --environment hoptranscribe-env \
+          --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }} \
+          --registry-server ${{ env.ACR_NAME }}.azurecr.io \
+          --registry-username ${{ secrets.ACR_USERNAME }} \
+          --registry-password ${{ secrets.ACR_PASSWORD }} \
+          --target-port 8080 \
+          --ingress external \
+          --min-replicas 1 \
+          --max-replicas 3 \
+          --cpu 1.0 \
+          --memory 2.0Gi \
+          --env-vars \
+            ASPNETCORE_ENVIRONMENT=Production \
+            OpenAI__ApiKey=${{ secrets.OPENAI_API_KEY }} \
+            OpenAI__TimeoutSeconds=30 \
+            OpenAI__Voice=alloy \
+          --secrets openai-key=${{ secrets.OPENAI_API_KEY }} \
+          || az containerapp update \
+            --name hoptranscribe-api \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+    
+    - name: Deploy Frontend to ACA
+      run: |
+        BACKEND_URL=$(az containerapp show \
+          --name hoptranscribe-api \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --query "properties.configuration.ingress.fqdn" \
+          -o tsv)
+        
+        az containerapp create \
+          --name hoptranscribe-web \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --environment hoptranscribe-env \
+          --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }} \
+          --registry-server ${{ env.ACR_NAME }}.azurecr.io \
+          --registry-username ${{ secrets.ACR_USERNAME }} \
+          --registry-password ${{ secrets.ACR_PASSWORD }} \
+          --target-port 80 \
+          --ingress external \
+          --min-replicas 1 \
+          --max-replicas 5 \
+          --cpu 0.5 \
+          --memory 1.0Gi \
+          --env-vars VITE_API_URL=https://${BACKEND_URL} \
+          || az containerapp update \
+            --name hoptranscribe-web \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+    
+    - name: Azure logout
+      run: az logout
+      if: always()
