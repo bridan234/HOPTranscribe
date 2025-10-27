@@ -149,7 +149,15 @@ jobs:
     
     - name: Terraform Init
       working-directory: ./infra/azure
-      run: terraform init
+      run: |
+        terraform init \
+          -backend-config="key=azure-${{ github.event.inputs.environment }}.tfstate"
+      env:
+        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
     
     - name: Terraform Plan
       working-directory: ./infra/azure
@@ -159,6 +167,7 @@ jobs:
           -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
           -out=tfplan
       env:
+        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -169,6 +178,7 @@ jobs:
       working-directory: ./infra/azure
       run: terraform apply -auto-approve tfplan
       env:
+        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -396,7 +406,15 @@ jobs:
     
     - name: Terraform Init
       working-directory: ./infra/azure
-      run: terraform init
+      run: |
+        terraform init \
+          -backend-config="key=azure-${{ github.event.inputs.environment }}.tfstate"
+      env:
+        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
     
     - name: Terraform Destroy
       working-directory: ./infra/azure
@@ -405,6 +423,7 @@ jobs:
           -var="environment=${{ github.event.inputs.environment }}" \
           -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
       env:
+        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

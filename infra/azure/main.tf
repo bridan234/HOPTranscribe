@@ -8,13 +8,13 @@ terraform {
     }
   }
 
-  # Uncomment for remote state
-  # backend "azurerm" {
-  #   resource_group_name  = "terraform-state-rg"
-  #   storage_account_name = "tfstate"
-  #   container_name       = "tfstate"
-  #   key                  = "hoptranscribe.tfstate"
-  # }
+  # Remote state backend
+  backend "azurerm" {
+    resource_group_name  = "terraform-state-rg"
+    storage_account_name = "statefilesbdn"
+    container_name       = "ct-hoptranscribe-state"
+    key                  = "azure.tfstate"
+  }
 }
 
 provider "azurerm" {
