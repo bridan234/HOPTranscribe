@@ -148,6 +148,8 @@ jobs:
       run: |
         # Apply only ACR first to get it ready for image push
         terraform apply -auto-approve \
+          -var="environment=${{ github.event.inputs.environment }}" \
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
           -target=azurerm_resource_group.rg \
           -target=azurerm_container_registry.acr \
           -target=azurerm_log_analytics_workspace.law
