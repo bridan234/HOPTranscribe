@@ -236,24 +236,18 @@ docker-compose build
 ASPNETCORE_ENVIRONMENT=Production docker-compose up -d
 ```
 
-### Azure Container Instances (ACI)
+### Azure Container Apps (ACA)
 
-See `.github/workflows/azure-deploy.yml` for automated deployment pipeline.
+Automated deployment via GitHub Actions on push to `main` branch.
 
-### Manual Azure Deployment
+**See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for complete setup guide.**
 
-```bash
-# Build and push images
-docker build -t hoptranscribe-fe:latest ./src/fe
-docker build -t hoptranscribe-be:latest ./src/be
+Quick start:
+1. Create Azure Container Registry
+2. Configure GitHub Secrets
+3. Push to main branch → Auto-deploy
 
-# Push to Azure Container Registry
-docker tag hoptranscribe-fe:latest yourregistry.azurecr.io/hoptranscribe-fe:latest
-docker push yourregistry.azurecr.io/hoptranscribe-fe:latest
-
-# Deploy to ACI or ACA
-az container create --resource-group YourRG --name hoptranscribe-fe ...
-```
+**Estimated Cost**: ~$40-60/month with auto-scaling
 
 ## 🧪 Testing
 

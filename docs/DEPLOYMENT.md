@@ -1,6 +1,6 @@
 # HOPTranscribe - Azure Deployment Guide
 
-This guide walks you through deploying HOPTranscribe to Azure using GitHub Actions CI/CD.
+This guide walks you through deploying HOPTranscribe to Azure Container Apps (ACA) using GitHub Actions CI/CD.
 
 ## 📋 Prerequisites
 
@@ -9,19 +9,16 @@ This guide walks you through deploying HOPTranscribe to Azure using GitHub Actio
 3. **OpenAI API Key** with Realtime API access
 4. **Azure CLI** installed locally (for setup)
 
-## 🚀 Deployment Options
+## 🚀 Architecture
 
-### Option 1: Azure Container Instances (ACI)
-- **Best for**: Development, testing, simple deployments
-- **Pros**: Simple, fast deployment, pay-per-second billing
-- **Cons**: No auto-scaling, limited networking features
-- **Cost**: ~$30-50/month
+**Azure Container Apps (ACA)** - Production-ready deployment with:
+- ✅ Auto-scaling (1-5 replicas)
+- ✅ Managed ingress with HTTPS
+- ✅ Built-in load balancing
+- ✅ Rolling updates with zero downtime
+- ✅ Cost optimization with scale-to-zero (optional)
 
-### Option 2: Azure Container Apps (ACA)
-- **Best for**: Production, auto-scaling requirements
-- **Pros**: Auto-scaling, better networking, managed ingress
-- **Cons**: Slightly more complex, higher base cost
-- **Cost**: ~$50-100/month
+**Estimated Cost**: ~$40-60/month with auto-scaling
 
 ## 🔧 Setup Instructions
 
@@ -123,7 +120,7 @@ git push origin main
 # GitHub Actions will automatically:
 # 1. Build Docker images
 # 2. Push to Azure Container Registry
-# 3. Deploy to Azure Container Instances/Apps
+# 3. Deploy to Azure Container Apps
 ```
 
 #### Manual Deployment (via GitHub UI)
@@ -135,26 +132,6 @@ git push origin main
 
 ### Step 6: Access Your Application
 
-#### For Azure Container Instances:
-```bash
-# Get frontend URL
-FRONTEND_URL=$(az container show \
-  --resource-group hoptranscribe-rg \
-  --name hoptranscribe-web \
-  --query "ipAddress.fqdn" -o tsv)
-
-echo "Frontend: http://${FRONTEND_URL}"
-
-# Get backend URL
-BACKEND_URL=$(az container show \
-  --resource-group hoptranscribe-rg \
-  --name hoptranscribe-api \
-  --query "ipAddress.fqdn" -o tsv)
-
-echo "Backend: http://${BACKEND_URL}:8080"
-```
-
-#### For Azure Container Apps:
 ```bash
 # Get frontend URL
 FRONTEND_URL=$(az containerapp show \
@@ -171,6 +148,7 @@ BACKEND_URL=$(az containerapp show \
   --query "properties.configuration.ingress.fqdn" -o tsv)
 
 echo "Backend: https://${BACKEND_URL}"
+echo "Health Check: https://${BACKEND_URL}/health/status"
 ```
 
 ## 🔍 Monitoring & Troubleshooting
@@ -192,35 +170,19 @@ az container logs \
   --follow
 ```
 
-#### ACA Logs:
-```bash
-# Backend logs
-az containerapp logs show \
-  --resource-group hoptranscribe-rg \
-  --name hoptranscribe-api \
-  --follow
-
-# Frontend logs
-az containerapp logs show \
-  --resource-group hoptranscribe-rg \
-  --name hoptranscribe-web \
-  --follow
-```
-
 ### Check Container Status
 
 ```bash
-# ACI
-az container show \
-  --resource-group hoptranscribe-rg \
-  --name hoptranscribe-api \
-  --query "instanceView.state" -o tsv
-
-# ACA
+# Check app status
 az containerapp show \
   --resource-group hoptranscribe-rg \
   --name hoptranscribe-api \
   --query "properties.runningStatus" -o tsv
+
+# Check replica count
+az containerapp replica list \
+  --resource-group hoptranscribe-rg \
+  --name hoptranscribe-api
 ```
 
 ### Common Issues
@@ -236,39 +198,61 @@ az acr credential show --name hoptranscribeacr
 **2. Backend Returns 401/403**
 ```bash
 # Verify OpenAI API key is set correctly
-az container show \
+az containerapp show \
   --resource-group hoptranscribe-rg \
   --name hoptranscribe-api \
-  --query "containers[0].environmentVariables"
+  --query "properties.template.containers[0].env"
 ```
 
 **3. CORS Errors**
 ```bash
-# Update backend AllowedOrigins to include frontend URL
-# Redeploy with updated environment variables
+# The backend automatically allows the frontend URL
+# If issues persist, check the backend logs for CORS errors
+az containerapp logs show \
+  --resource-group hoptranscribe-rg \
+  --name hoptranscribe-api \
+  --follow
 ```
 
 ## 📊 Cost Optimization
 
 ### ACI Cost Reduction
+## 📊 Cost Optimization
+
+### Enable Scale-to-Zero (Development)
 ```bash
-# Stop containers when not in use
-az container stop \
+# Update backend to scale to zero when idle
+az containerapp update \
+  --name hoptranscribe-api \
   --resource-group hoptranscribe-rg \
-  --name hoptranscribe-api
+  --min-replicas 0 \
+  --max-replicas 2
 
-# Start when needed
-az container start \
-  --resource-group hoptranscribe-rg \
-  --name hoptranscribe-api
+# Note: First request after scale-to-zero will have ~10s cold start
 ```
 
-### ACA Cost Reduction
-```yaml
-# In azure-deploy.yml, adjust min/max replicas
---min-replicas 0  # Scale to zero when idle
---max-replicas 2  # Limit max instances
+### Reduce Resources (Lower Cost)
+```bash
+# Backend - reduce CPU/memory
+az containerapp update \
+  --name hoptranscribe-api \
+  --resource-group hoptranscribe-rg \
+  --cpu 0.5 \
+  --memory 1.0Gi
+
+# Frontend - reduce CPU/memory
+az containerapp update \
+  --name hoptranscribe-web \
+  --resource-group hoptranscribe-rg \
+  --cpu 0.25 \
+  --memory 0.5Gi
 ```
+
+**Estimated Monthly Costs:**
+- **Production** (1-3 backend, 1-5 frontend replicas): ~$40-60
+- **Development** (scale-to-zero enabled): ~$15-25
+- **ACR Basic**: ~$5
+- **Total**: ~$20-65/month depending on usage
 
 ## 🧹 Cleanup
 
@@ -300,7 +284,7 @@ az ad sp delete --id $(az ad sp list --display-name "hoptranscribe-github-action
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 Deploy to Azure Job                          │
+│            Deploy to Azure Container Apps Job                │
 │  1. Login to Azure                                           │
 │  2. Deploy backend container (ACI/ACA)                       │
 │  3. Deploy frontend container (ACI/ACA)                      │

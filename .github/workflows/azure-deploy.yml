@@ -57,65 +57,11 @@ jobs:
         cache-from: type=registry,ref=${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:buildcache
         cache-to: type=registry,ref=${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:buildcache,mode=max
 
-  deploy-to-aci:
-    name: Deploy to Azure Container Instances
+  deploy-to-aca:
+    name: Deploy to Azure Container Apps
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-    
-    - name: Deploy Backend to ACI
-      uses: azure/aci-deploy@v1
-      with:
-        resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
-        name: hoptranscribe-api
-        image: ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-        registry-login-server: ${{ env.ACR_NAME }}.azurecr.io
-        registry-username: ${{ secrets.ACR_USERNAME }}
-        registry-password: ${{ secrets.ACR_PASSWORD }}
-        dns-name-label: hoptranscribe-api-${{ github.run_number }}
-        ports: 8080
-        cpu: 1
-        memory: 1.5
-        environment-variables: |
-          ASPNETCORE_ENVIRONMENT=Production
-          OpenAI__ApiKey=${{ secrets.OPENAI_API_KEY }}
-          OpenAI__TimeoutSeconds=30
-          OpenAI__Voice=alloy
-          AllowedOrigins__0=https://hoptranscribe-web-${{ github.run_number }}.eastus.azurecontainer.io
-        secure-environment-variables: |
-          OpenAI__ApiKey=${{ secrets.OPENAI_API_KEY }}
-    
-    - name: Deploy Frontend to ACI
-      uses: azure/aci-deploy@v1
-      with:
-        resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
-        name: hoptranscribe-web
-        image: ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-        registry-login-server: ${{ env.ACR_NAME }}.azurecr.io
-        registry-username: ${{ secrets.ACR_USERNAME }}
-        registry-password: ${{ secrets.ACR_PASSWORD }}
-        dns-name-label: hoptranscribe-web-${{ github.run_number }}
-        ports: 80
-        cpu: 0.5
-        memory: 0.5
-        environment-variables: |
-          VITE_API_URL=https://hoptranscribe-api-${{ github.run_number }}.eastus.azurecontainer.io:8080
-
-    - name: Azure logout
-      run: az logout
-      if: always()
-
-  deploy-to-aca:
-    name: Deploy to Azure Container Apps (Alternative)
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    if: github.ref == 'refs/heads/main' && false  # Set to true to enable ACA deployment
     
     steps:
     - name: Azure Login
@@ -150,10 +96,10 @@ jobs:
           --memory 2.0Gi \
           --env-vars \
             ASPNETCORE_ENVIRONMENT=Production \
-            OpenAI__ApiKey=${{ secrets.OPENAI_API_KEY }} \
             OpenAI__TimeoutSeconds=30 \
             OpenAI__Voice=alloy \
           --secrets openai-key=${{ secrets.OPENAI_API_KEY }} \
+          --set-env-vars OpenAI__ApiKey=secretref:openai-key \
           || az containerapp update \
             --name hoptranscribe-api \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
