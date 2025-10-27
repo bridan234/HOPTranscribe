@@ -29,17 +29,6 @@ resource "azurerm_resource_group" "main" {
   tags = var.tags
 }
 
-# Azure Container Registry
-resource "azurerm_container_registry" "acr" {
-  name                = "${var.project_name}${var.environment}acr"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-  sku                 = var.acr_sku
-  admin_enabled       = true
-  
-  tags = var.tags
-}
-
 # Log Analytics Workspace for Container Apps
 resource "azurerm_log_analytics_workspace" "logs" {
   name                = "${var.project_name}-${var.environment}-logs"
@@ -67,17 +56,6 @@ resource "azurerm_container_app" "backend" {
   container_app_environment_id = azurerm_container_app_environment.env.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
-  
-  registry {
-    server               = azurerm_container_registry.acr.login_server
-    username             = azurerm_container_registry.acr.admin_username
-    password_secret_name = "acr-password"
-  }
-
-  secret {
-    name  = "acr-password"
-    value = azurerm_container_registry.acr.admin_password
-  }
 
   secret {
     name  = "openai-api-key"
@@ -90,7 +68,7 @@ resource "azurerm_container_app" "backend" {
 
     container {
       name   = "backend"
-      image  = "${azurerm_container_registry.acr.login_server}/${var.backend_image_name}:latest"
+      image  = "docker.io/bridan/${var.backend_image_name}:latest"
       cpu    = var.backend_cpu
       memory = var.backend_memory
 
@@ -147,17 +125,6 @@ resource "azurerm_container_app" "frontend" {
   container_app_environment_id = azurerm_container_app_environment.env.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
-  
-  registry {
-    server               = azurerm_container_registry.acr.login_server
-    username             = azurerm_container_registry.acr.admin_username
-    password_secret_name = "acr-password"
-  }
-
-  secret {
-    name  = "acr-password"
-    value = azurerm_container_registry.acr.admin_password
-  }
 
   template {
     min_replicas = var.frontend_min_replicas
@@ -165,7 +132,7 @@ resource "azurerm_container_app" "frontend" {
 
     container {
       name   = "frontend"
-      image  = "${azurerm_container_registry.acr.login_server}/${var.frontend_image_name}:latest"
+      image  = "docker.io/bridan/${var.frontend_image_name}:latest"
       cpu    = var.frontend_cpu
       memory = var.frontend_memory
 

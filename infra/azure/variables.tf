@@ -31,13 +31,6 @@ variable "tags" {
   }
 }
 
-# Container Registry
-variable "acr_sku" {
-  description = "SKU for Azure Container Registry (Basic, Standard, Premium)"
-  type        = string
-  default     = "Basic"
-}
-
 # Logging
 variable "log_retention_days" {
   description = "Log Analytics retention in days"

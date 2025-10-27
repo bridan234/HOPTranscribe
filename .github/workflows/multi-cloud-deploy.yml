@@ -54,42 +54,37 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
-    # Build images (will be tagged and pushed in cloud-specific jobs)
-    - name: Build Backend image
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    # Build and push backend image
+    - name: Build and push Backend image
       uses: docker/build-push-action@v5
       with:
         context: ./src/be
         file: ./src/be/Dockerfile
-        push: false
-        load: true
-        tags: hoptranscribe-backend:${{ github.sha }}
+        push: true
+        tags: |
+          ${{ secrets.DOCKERHUB_USERNAME }}/hoptranscribe-backend:latest
+          ${{ secrets.DOCKERHUB_USERNAME }}/hoptranscribe-backend:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
-    - name: Build Frontend image
+    # Build and push frontend image
+    - name: Build and push Frontend image
       uses: docker/build-push-action@v5
       with:
         context: ./src/fe
         file: ./src/fe/Dockerfile
-        push: false
-        load: true
-        tags: hoptranscribe-frontend:${{ github.sha }}
+        push: true
+        tags: |
+          ${{ secrets.DOCKERHUB_USERNAME }}/hoptranscribe-frontend:latest
+          ${{ secrets.DOCKERHUB_USERNAME }}/hoptranscribe-frontend:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-    
-    - name: Save Docker images
-      run: |
-        docker save hoptranscribe-backend:${{ github.sha }} | gzip > backend.tar.gz
-        docker save hoptranscribe-frontend:${{ github.sha }} | gzip > frontend.tar.gz
-    
-    - name: Upload images as artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: docker-images
-        path: |
-          backend.tar.gz
-          frontend.tar.gz
-        retention-days: 1
 
   # ============================================================
   # Deploy to Azure Container Apps
@@ -142,66 +137,10 @@ jobs:
         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
     
-    - name: Terraform Apply (ACR and base infrastructure)
+    - name: Terraform Apply
       if: github.event.inputs.terraform_action == 'apply'
       working-directory: ./infra/azure
-      run: |
-        # Apply only ACR first to get it ready for image push
-        terraform apply -auto-approve \
-          -var="environment=${{ github.event.inputs.environment }}" \
-          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
-          -target=azurerm_resource_group.rg \
-          -target=azurerm_container_registry.acr \
-          -target=azurerm_log_analytics_workspace.law
-      env:
-        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
-        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-    
-    - name: Download Docker images
-      if: github.event.inputs.terraform_action == 'apply'
-      uses: actions/download-artifact@v4
-      with:
-        name: docker-images
-    
-    - name: Load Docker images
-      if: github.event.inputs.terraform_action == 'apply'
-      run: |
-        docker load < backend.tar.gz
-        docker load < frontend.tar.gz
-    
-    - name: Configure Azure Container Registry
-      if: github.event.inputs.terraform_action == 'apply'
-      run: |
-        ACR_NAME=${{ secrets.AZURE_ACR_NAME }}
-        az acr login --name $ACR_NAME
-        
-        # Tag and push backend
-        docker tag hoptranscribe-backend:${{ github.sha }} \
-          ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-        docker tag hoptranscribe-backend:${{ github.sha }} \
-          ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
-        docker push ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-        docker push ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
-        
-        # Tag and push frontend
-        docker tag hoptranscribe-frontend:${{ github.sha }} \
-          ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-        docker tag hoptranscribe-frontend:${{ github.sha }} \
-          ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
-        docker push ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-        docker push ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
-    
-    - name: Terraform Apply (Container Apps with real images)
-      if: github.event.inputs.terraform_action == 'apply'
-      working-directory: ./infra/azure
-      run: |
-        # Now apply everything including Container Apps that reference the pushed images
-        terraform apply -auto-approve \
-          -var="environment=${{ github.event.inputs.environment }}" \
-          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
+      run: terraform apply -auto-approve tfplan
       env:
         ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
