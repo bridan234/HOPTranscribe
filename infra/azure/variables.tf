@@ -31,6 +31,19 @@ variable "tags" {
   }
 }
 
+# Docker Hub Configuration
+variable "dockerhub_username" {
+  description = "Docker Hub username"
+  type        = string
+  default     = "bridan"
+}
+
+variable "dockerhub_token" {
+  description = "Docker Hub access token or password (sensitive)"
+  type        = string
+  sensitive   = true
+}
+
 # Logging
 variable "log_retention_days" {
   description = "Log Analytics retention in days"

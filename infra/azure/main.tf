@@ -56,6 +56,17 @@ resource "azurerm_container_app" "backend" {
   container_app_environment_id = azurerm_container_app_environment.env.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  
+  registry {
+    server               = "docker.io"
+    username             = var.dockerhub_username
+    password_secret_name = "dockerhub-password"
+  }
+
+  secret {
+    name  = "dockerhub-password"
+    value = var.dockerhub_token
+  }
 
   secret {
     name  = "openai-api-key"
@@ -125,6 +136,17 @@ resource "azurerm_container_app" "frontend" {
   container_app_environment_id = azurerm_container_app_environment.env.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  
+  registry {
+    server               = "docker.io"
+    username             = var.dockerhub_username
+    password_secret_name = "dockerhub-password"
+  }
+
+  secret {
+    name  = "dockerhub-password"
+    value = var.dockerhub_token
+  }
 
   template {
     min_replicas = var.frontend_min_replicas

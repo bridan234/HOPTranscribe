@@ -129,6 +129,7 @@ jobs:
         terraform plan \
           -var="environment=${{ github.event.inputs.environment }}" \
           -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="dockerhub_token=${{ secrets.DOCKERHUB_TOKEN }}" \
           -out=tfplan
       env:
         ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
@@ -385,7 +386,8 @@ jobs:
       run: |
         terraform destroy -auto-approve \
           -var="environment=${{ github.event.inputs.environment }}" \
-          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="dockerhub_token=${{ secrets.DOCKERHUB_TOKEN }}"
       env:
         ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
