@@ -1,0 +1,36 @@
+# Project Configuration
+project_name = "hoptranscribe"
+environment  = "dev"  # dev, staging, prod
+location     = "eastus"
+
+# Tags
+tags = {
+  Project     = "HOPTranscribe"
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Owner       = "YourName"
+}
+
+# Container Registry
+acr_sku = "Basic"  # Basic, Standard, Premium
+
+# Logging
+log_retention_days = 30
+
+# Backend Configuration
+backend_image_name    = "hoptranscribe-be"
+backend_min_replicas  = 1  # Set to 0 for scale-to-zero (dev only)
+backend_max_replicas  = 3
+backend_cpu           = 1.0
+backend_memory        = "2Gi"
+
+# Frontend Configuration
+frontend_image_name   = "hoptranscribe-fe"
+frontend_min_replicas = 1  # Set to 0 for scale-to-zero (dev only)
+frontend_max_replicas = 5
+frontend_cpu          = 0.5
+frontend_memory       = "1Gi"
+
+# OpenAI Configuration (DO NOT COMMIT - Use environment variables or secret management)
+# openai_api_key = "sk-proj-your-key-here"  # Pass via TF_VAR_openai_api_key instead
+openai_voice = "alloy"

@@ -1,0 +1,198 @@
+terraform {
+  required_version = ">= 1.0"
+  
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0"
+    }
+  }
+
+  # Uncomment for remote state
+  # backend "azurerm" {
+  #   resource_group_name  = "terraform-state-rg"
+  #   storage_account_name = "tfstate"
+  #   container_name       = "tfstate"
+  #   key                  = "hoptranscribe.tfstate"
+  # }
+}
+
+provider "azurerm" {
+  features {}
+}
+
+# Resource Group
+resource "azurerm_resource_group" "main" {
+  name     = "${var.project_name}-${var.environment}-rg"
+  location = var.location
+  
+  tags = var.tags
+}
+
+# Azure Container Registry
+resource "azurerm_container_registry" "acr" {
+  name                = "${var.project_name}${var.environment}acr"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = var.acr_sku
+  admin_enabled       = true
+  
+  tags = var.tags
+}
+
+# Log Analytics Workspace for Container Apps
+resource "azurerm_log_analytics_workspace" "logs" {
+  name                = "${var.project_name}-${var.environment}-logs"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = var.log_retention_days
+  
+  tags = var.tags
+}
+
+# Container Apps Environment
+resource "azurerm_container_app_environment" "env" {
+  name                       = "${var.project_name}-${var.environment}-env"
+  location                   = azurerm_resource_group.main.location
+  resource_group_name        = azurerm_resource_group.main.name
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.logs.id
+  
+  tags = var.tags
+}
+
+# Backend Container App
+resource "azurerm_container_app" "backend" {
+  name                         = "${var.project_name}-api"
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  resource_group_name          = azurerm_resource_group.main.name
+  revision_mode                = "Single"
+  
+  registry {
+    server               = azurerm_container_registry.acr.login_server
+    username             = azurerm_container_registry.acr.admin_username
+    password_secret_name = "acr-password"
+  }
+
+  secret {
+    name  = "acr-password"
+    value = azurerm_container_registry.acr.admin_password
+  }
+
+  secret {
+    name  = "openai-api-key"
+    value = var.openai_api_key
+  }
+
+  template {
+    min_replicas = var.backend_min_replicas
+    max_replicas = var.backend_max_replicas
+
+    container {
+      name   = "backend"
+      image  = "${azurerm_container_registry.acr.login_server}/${var.backend_image_name}:latest"
+      cpu    = var.backend_cpu
+      memory = var.backend_memory
+
+      env {
+        name  = "ASPNETCORE_ENVIRONMENT"
+        value = var.environment == "prod" ? "Production" : "Development"
+      }
+
+      env {
+        name        = "OpenAI__ApiKey"
+        secret_name = "openai-api-key"
+      }
+
+      env {
+        name  = "OpenAI__TimeoutSeconds"
+        value = "30"
+      }
+
+      env {
+        name  = "OpenAI__Voice"
+        value = var.openai_voice
+      }
+
+      liveness_probe {
+        transport = "HTTP"
+        port      = 8080
+        path      = "/health/status"
+      }
+
+      readiness_probe {
+        transport = "HTTP"
+        port      = 8080
+        path      = "/health/status"
+      }
+    }
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 8080
+    
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  tags = var.tags
+}
+
+# Frontend Container App
+resource "azurerm_container_app" "frontend" {
+  name                         = "${var.project_name}-web"
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  resource_group_name          = azurerm_resource_group.main.name
+  revision_mode                = "Single"
+  
+  registry {
+    server               = azurerm_container_registry.acr.login_server
+    username             = azurerm_container_registry.acr.admin_username
+    password_secret_name = "acr-password"
+  }
+
+  secret {
+    name  = "acr-password"
+    value = azurerm_container_registry.acr.admin_password
+  }
+
+  template {
+    min_replicas = var.frontend_min_replicas
+    max_replicas = var.frontend_max_replicas
+
+    container {
+      name   = "frontend"
+      image  = "${azurerm_container_registry.acr.login_server}/${var.frontend_image_name}:latest"
+      cpu    = var.frontend_cpu
+      memory = var.frontend_memory
+
+      env {
+        name  = "VITE_API_URL"
+        value = "https://${azurerm_container_app.backend.ingress[0].fqdn}"
+      }
+
+      liveness_probe {
+        transport = "HTTP"
+        port      = 80
+        path      = "/"
+      }
+    }
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 80
+    
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  tags = var.tags
+
+  depends_on = [azurerm_container_app.backend]
+}

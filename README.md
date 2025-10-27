@@ -226,7 +226,56 @@ Configurable via Settings Panel in the UI:
 
 ## 🚢 Deployment
 
-### Docker Production Build
+### Multi-Cloud Infrastructure as Code
+
+HOPTranscribe supports deployment to **three major cloud providers** using Terraform:
+
+| Cloud | Service | Scale-to-Zero | Dev Cost | Prod Cost | Best For |
+|-------|---------|---------------|----------|-----------|----------|
+| **Azure** | Container Apps | ✅ Yes | $15-25 | $50-80 | Balanced cost/features |
+| **AWS** | ECS Fargate | ❌ No | $55-65 | $130-155 | Enterprise/complex networking |
+| **GCP** | Cloud Run | ✅ Yes | $6-12 | $65-105 | Lowest dev cost |
+
+### Quick Deploy via GitHub Actions
+
+1. **Go to Actions tab** → `Multi-Cloud Deployment` → `Run workflow`
+2. **Select**:
+   - Cloud provider: `azure`, `aws`, `gcp`, or `all`
+   - Environment: `dev`, `staging`, or `prod`
+   - Action: `plan` (preview) or `apply` (deploy)
+3. **Click** `Run workflow`
+
+### Manual Terraform Deployment
+
+```bash
+# Choose your cloud
+cd infra/azure  # or aws, or gcp
+
+# Configure variables
+cp terraform.tfvars.example terraform.tfvars
+nano terraform.tfvars
+
+# Set OpenAI key securely
+export TF_VAR_openai_api_key="sk-proj-your-key-here"
+
+# Deploy
+terraform init
+terraform plan
+terraform apply
+```
+
+### Deployment Documentation
+
+### Documentation
+
+- 📘 **[Multi-Cloud Infrastructure Guide](./infra/README.md)** - Choose your cloud provider
+- 📘 **[Multi-Cloud Summary](./docs/infrastructure/MULTI_CLOUD_SUMMARY.md)** - Detailed comparison
+- 📘 **[Azure Deployment](./infra/azure/README.md)** - Azure Container Apps setup
+- 📘 **[AWS Deployment](./infra/aws/README.md)** - ECS Fargate setup
+- 📘 **[GCP Deployment](./infra/gcp/README.md)** - Cloud Run setup
+- 📘 **[GitHub Actions Guide](./docs/GITHUB_ACTIONS_GUIDE.md)** - CI/CD setup
+
+### Docker Production Build (Local)
 
 ```bash
 # Build images
@@ -235,19 +284,6 @@ docker-compose build
 # Run in production mode
 ASPNETCORE_ENVIRONMENT=Production docker-compose up -d
 ```
-
-### Azure Container Apps (ACA)
-
-Automated deployment via GitHub Actions on push to `main` branch.
-
-**See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for complete setup guide.**
-
-Quick start:
-1. Create Azure Container Registry
-2. Configure GitHub Secrets
-3. Push to main branch → Auto-deploy
-
-**Estimated Cost**: ~$40-60/month with auto-scaling
 
 ## 🧪 Testing
 

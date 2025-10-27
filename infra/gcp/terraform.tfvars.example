@@ -1,0 +1,34 @@
+# Project Configuration
+project_id   = "your-gcp-project-id"  # REQUIRED: Replace with your GCP project ID
+project_name = "hoptranscribe"
+environment  = "dev"  # dev, staging, prod
+region       = "us-central1"
+
+# Labels
+labels = {
+  project     = "hoptranscribe"
+  environment = "dev"
+  managed-by  = "terraform"
+  owner       = "yourname"
+}
+
+# Backend Configuration (Cloud Run)
+backend_image_name   = "hoptranscribe-backend"
+backend_min_instances = 1  # Set to 0 for scale-to-zero (dev only)
+backend_max_instances = 3
+backend_cpu          = "1"  # 1, 2, 4, 6, or 8 vCPUs
+backend_memory       = "2Gi"  # 512Mi, 1Gi, 2Gi, 4Gi, 8Gi
+
+# Frontend Configuration (Cloud Run)
+frontend_image_name   = "hoptranscribe-frontend"
+frontend_min_instances = 1  # Set to 0 for scale-to-zero (dev only)
+frontend_max_instances = 5
+frontend_cpu          = "1"
+frontend_memory       = "512Mi"
+
+# OpenAI Configuration (DO NOT COMMIT - Use environment variables or secret management)
+# openai_api_key = "sk-proj-your-key-here"  # Pass via TF_VAR_openai_api_key instead
+openai_voice = "alloy"
+
+# Load Balancer (optional - for custom domain)
+enable_load_balancer = false

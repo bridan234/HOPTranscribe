@@ -1,0 +1,503 @@
+name: Multi-Cloud Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        description: 'Cloud provider to deploy to'
+        required: true
+        type: choice
+        options:
+          - azure
+          - aws
+          - gcp
+          - all
+        default: 'azure'
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+        default: 'dev'
+      terraform_action:
+        description: 'Terraform action to perform'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: 'plan'
+  # Manual trigger only - no automatic deployments
+
+env:
+  TF_VERSION: '1.6.0'
+  FRONTEND_IMAGE_NAME: hoptranscribe-frontend
+  BACKEND_IMAGE_NAME: hoptranscribe-backend
+
+jobs:
+  # ============================================================
+  # Build Docker Images
+  # ============================================================
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    if: github.event.inputs.terraform_action != 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    # Build images (will be tagged and pushed in cloud-specific jobs)
+    - name: Build Backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/be
+        file: ./src/be/Dockerfile
+        push: false
+        load: true
+        tags: hoptranscribe-backend:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Build Frontend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/fe
+        file: ./src/fe/Dockerfile
+        push: false
+        load: true
+        tags: hoptranscribe-frontend:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Save Docker images
+      run: |
+        docker save hoptranscribe-backend:${{ github.sha }} | gzip > backend.tar.gz
+        docker save hoptranscribe-frontend:${{ github.sha }} | gzip > frontend.tar.gz
+    
+    - name: Upload images as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-images
+        path: |
+          backend.tar.gz
+          frontend.tar.gz
+        retention-days: 1
+
+  # ============================================================
+  # Deploy to Azure Container Apps
+  # ============================================================
+  deploy-azure:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: |
+      (github.event.inputs.cloud_provider == 'azure' || github.event.inputs.cloud_provider == 'all') &&
+      github.event.inputs.terraform_action != 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+    
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Download Docker images
+      uses: actions/download-artifact@v4
+      with:
+        name: docker-images
+    
+    - name: Load Docker images
+      run: |
+        docker load < backend.tar.gz
+        docker load < frontend.tar.gz
+    
+    - name: Configure Azure Container Registry
+      run: |
+        ACR_NAME=${{ secrets.AZURE_ACR_NAME }}
+        az acr login --name $ACR_NAME
+        
+        # Tag and push backend
+        docker tag hoptranscribe-backend:${{ github.sha }} \
+          ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+        docker tag hoptranscribe-backend:${{ github.sha }} \
+          ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
+        docker push ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+        docker push ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
+        
+        # Tag and push frontend
+        docker tag hoptranscribe-frontend:${{ github.sha }} \
+          ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+        docker tag hoptranscribe-frontend:${{ github.sha }} \
+          ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
+        docker push ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+        docker push ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
+    
+    - name: Terraform Init
+      working-directory: ./infra/azure
+      run: terraform init
+    
+    - name: Terraform Plan
+      working-directory: ./infra/azure
+      run: |
+        terraform plan \
+          -var="environment=${{ github.event.inputs.environment }}" \
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -out=tfplan
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    
+    - name: Terraform Apply
+      if: github.event.inputs.terraform_action == 'apply'
+      working-directory: ./infra/azure
+      run: terraform apply -auto-approve tfplan
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    
+    - name: Get Outputs
+      if: github.event.inputs.terraform_action == 'apply'
+      working-directory: ./infra/azure
+      run: |
+        echo "## Azure Deployment" >> $GITHUB_STEP_SUMMARY
+        echo "**Frontend URL:** $(terraform output -raw frontend_url)" >> $GITHUB_STEP_SUMMARY
+        echo "**Backend URL:** $(terraform output -raw backend_url)" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Azure Logout
+      if: always()
+      run: az logout
+
+  # ============================================================
+  # Deploy to AWS ECS Fargate
+  # ============================================================
+  deploy-aws:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: |
+      (github.event.inputs.cloud_provider == 'aws' || github.event.inputs.cloud_provider == 'all') &&
+      github.event.inputs.terraform_action != 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Download Docker images
+      uses: actions/download-artifact@v4
+      with:
+        name: docker-images
+    
+    - name: Load Docker images
+      run: |
+        docker load < backend.tar.gz
+        docker load < frontend.tar.gz
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+    
+    - name: Push images to ECR
+      run: |
+        # Get ECR URLs from Terraform output or use defaults
+        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        AWS_REGION=${{ secrets.AWS_REGION }}
+        
+        BACKEND_ECR="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/hoptranscribe-${{ github.event.inputs.environment }}-backend"
+        FRONTEND_ECR="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/hoptranscribe-${{ github.event.inputs.environment }}-frontend"
+        
+        # Create ECR repositories if they don't exist
+        aws ecr describe-repositories --repository-names hoptranscribe-${{ github.event.inputs.environment }}-backend || \
+          aws ecr create-repository --repository-name hoptranscribe-${{ github.event.inputs.environment }}-backend
+        
+        aws ecr describe-repositories --repository-names hoptranscribe-${{ github.event.inputs.environment }}-frontend || \
+          aws ecr create-repository --repository-name hoptranscribe-${{ github.event.inputs.environment }}-frontend
+        
+        # Tag and push backend
+        docker tag hoptranscribe-backend:${{ github.sha }} ${BACKEND_ECR}:${{ github.sha }}
+        docker tag hoptranscribe-backend:${{ github.sha }} ${BACKEND_ECR}:latest
+        docker push ${BACKEND_ECR}:${{ github.sha }}
+        docker push ${BACKEND_ECR}:latest
+        
+        # Tag and push frontend
+        docker tag hoptranscribe-frontend:${{ github.sha }} ${FRONTEND_ECR}:${{ github.sha }}
+        docker tag hoptranscribe-frontend:${{ github.sha }} ${FRONTEND_ECR}:latest
+        docker push ${FRONTEND_ECR}:${{ github.sha }}
+        docker push ${FRONTEND_ECR}:latest
+    
+    - name: Terraform Init
+      working-directory: ./infra/aws
+      run: terraform init
+    
+    - name: Terraform Plan
+      working-directory: ./infra/aws
+      run: |
+        terraform plan \
+          -var="environment=${{ github.event.inputs.environment }}" \
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="region=${{ secrets.AWS_REGION }}" \
+          -out=tfplan
+    
+    - name: Terraform Apply
+      if: github.event.inputs.terraform_action == 'apply'
+      working-directory: ./infra/aws
+      run: terraform apply -auto-approve tfplan
+    
+    - name: Get Outputs
+      if: github.event.inputs.terraform_action == 'apply'
+      working-directory: ./infra/aws
+      run: |
+        echo "## AWS Deployment" >> $GITHUB_STEP_SUMMARY
+        echo "**Frontend URL:** $(terraform output -raw frontend_url)" >> $GITHUB_STEP_SUMMARY
+        echo "**Backend URL:** $(terraform output -raw backend_url)" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # Deploy to GCP Cloud Run
+  # ============================================================
+  deploy-gcp:
+    name: Deploy to GCP
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: |
+      (github.event.inputs.cloud_provider == 'gcp' || github.event.inputs.cloud_provider == 'all') &&
+      github.event.inputs.terraform_action != 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+    
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Download Docker images
+      uses: actions/download-artifact@v4
+      with:
+        name: docker-images
+    
+    - name: Load Docker images
+      run: |
+        docker load < backend.tar.gz
+        docker load < frontend.tar.gz
+    
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev
+    
+    - name: Push images to Artifact Registry
+      run: |
+        PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+        REGION=${{ secrets.GCP_REGION }}
+        ENV=${{ github.event.inputs.environment }}
+        
+        REPO="${REGION}-docker.pkg.dev/${PROJECT_ID}/hoptranscribe-${ENV}"
+        
+        # Tag and push backend
+        docker tag hoptranscribe-backend:${{ github.sha }} ${REPO}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+        docker tag hoptranscribe-backend:${{ github.sha }} ${REPO}/${{ env.BACKEND_IMAGE_NAME }}:latest
+        docker push ${REPO}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+        docker push ${REPO}/${{ env.BACKEND_IMAGE_NAME }}:latest
+        
+        # Tag and push frontend
+        docker tag hoptranscribe-frontend:${{ github.sha }} ${REPO}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+        docker tag hoptranscribe-frontend:${{ github.sha }} ${REPO}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+        docker push ${REPO}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+        docker push ${REPO}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+    
+    - name: Terraform Init
+      working-directory: ./infra/gcp
+      run: terraform init
+    
+    - name: Terraform Plan
+      working-directory: ./infra/gcp
+      run: |
+        terraform plan \
+          -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+          -var="environment=${{ github.event.inputs.environment }}" \
+          -var="region=${{ secrets.GCP_REGION }}" \
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -out=tfplan
+    
+    - name: Terraform Apply
+      if: github.event.inputs.terraform_action == 'apply'
+      working-directory: ./infra/gcp
+      run: terraform apply -auto-approve tfplan
+    
+    - name: Get Outputs
+      if: github.event.inputs.terraform_action == 'apply'
+      working-directory: ./infra/gcp
+      run: |
+        echo "## GCP Deployment" >> $GITHUB_STEP_SUMMARY
+        echo "**Frontend URL:** $(terraform output -raw frontend_url)" >> $GITHUB_STEP_SUMMARY
+        echo "**Backend URL:** $(terraform output -raw backend_url)" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # Terraform Destroy (Cleanup)
+  # ============================================================
+  destroy-azure:
+    name: Destroy Azure Resources
+    runs-on: ubuntu-latest
+    if: |
+      (github.event.inputs.cloud_provider == 'azure' || github.event.inputs.cloud_provider == 'all') &&
+      github.event.inputs.terraform_action == 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+    
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Terraform Init
+      working-directory: ./infra/azure
+      run: terraform init
+    
+    - name: Terraform Destroy
+      working-directory: ./infra/azure
+      run: |
+        terraform destroy -auto-approve \
+          -var="environment=${{ github.event.inputs.environment }}" \
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+  destroy-aws:
+    name: Destroy AWS Resources
+    runs-on: ubuntu-latest
+    if: |
+      (github.event.inputs.cloud_provider == 'aws' || github.event.inputs.cloud_provider == 'all') &&
+      github.event.inputs.terraform_action == 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Terraform Init
+      working-directory: ./infra/aws
+      run: terraform init
+    
+    - name: Terraform Destroy
+      working-directory: ./infra/aws
+      run: |
+        terraform destroy -auto-approve \
+          -var="environment=${{ github.event.inputs.environment }}" \
+          -var="region=${{ secrets.AWS_REGION }}" \
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
+
+  destroy-gcp:
+    name: Destroy GCP Resources
+    runs-on: ubuntu-latest
+    if: |
+      (github.event.inputs.cloud_provider == 'gcp' || github.event.inputs.cloud_provider == 'all') &&
+      github.event.inputs.terraform_action == 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+    
+    - name: Terraform Init
+      working-directory: ./infra/gcp
+      run: terraform init
+    
+    - name: Terraform Destroy
+      working-directory: ./infra/gcp
+      run: |
+        terraform destroy -auto-approve \
+          -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+          -var="environment=${{ github.event.inputs.environment }}" \
+          -var="region=${{ secrets.GCP_REGION }}" \
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
+
+  # ============================================================
+  # Deployment Summary
+  # ============================================================
+  deployment-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [deploy-azure, deploy-aws, deploy-gcp]
+    if: |
+      always() && 
+      github.event.inputs.terraform_action == 'apply'
+    
+    steps:
+    - name: Create Summary
+      run: |
+        echo "# 🚀 Multi-Cloud Deployment Complete" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Cloud Provider:** ${{ github.event.inputs.cloud_provider }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Action:** ${{ github.event.inputs.terraform_action }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit SHA:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Check individual job outputs for deployment URLs." >> $GITHUB_STEP_SUMMARY

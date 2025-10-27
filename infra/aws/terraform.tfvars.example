@@ -1,0 +1,38 @@
+# Project Configuration
+project_name = "hoptranscribe"
+environment  = "dev"  # dev, staging, prod
+region       = "us-east-1"
+
+# Tags
+tags = {
+  Project     = "HOPTranscribe"
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Owner       = "YourName"
+}
+
+# Network Configuration
+vpc_cidr           = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Logging
+log_retention_days = 30
+
+# Backend Configuration (AWS Fargate)
+# CPU/Memory combinations: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+backend_cpu            = 1024  # 1 vCPU = 1024 units
+backend_memory         = 2048  # 2GB
+backend_desired_count  = 1
+backend_min_capacity   = 1
+backend_max_capacity   = 3
+
+# Frontend Configuration
+frontend_cpu           = 512   # 0.5 vCPU = 512 units
+frontend_memory        = 1024  # 1GB
+frontend_desired_count = 1
+frontend_min_capacity  = 1
+frontend_max_capacity  = 5
+
+# OpenAI Configuration (DO NOT COMMIT - Use environment variables or secret management)
+# openai_api_key = "sk-proj-your-key-here"  # Pass via TF_VAR_openai_api_key instead
+openai_voice = "alloy"
