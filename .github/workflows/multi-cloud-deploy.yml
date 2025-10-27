@@ -116,37 +116,6 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
-    - name: Download Docker images
-      uses: actions/download-artifact@v4
-      with:
-        name: docker-images
-    
-    - name: Load Docker images
-      run: |
-        docker load < backend.tar.gz
-        docker load < frontend.tar.gz
-    
-    - name: Configure Azure Container Registry
-      run: |
-        ACR_NAME=${{ secrets.AZURE_ACR_NAME }}
-        az acr login --name $ACR_NAME
-        
-        # Tag and push backend
-        docker tag hoptranscribe-backend:${{ github.sha }} \
-          ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-        docker tag hoptranscribe-backend:${{ github.sha }} \
-          ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
-        docker push ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-        docker push ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
-        
-        # Tag and push frontend
-        docker tag hoptranscribe-frontend:${{ github.sha }} \
-          ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-        docker tag hoptranscribe-frontend:${{ github.sha }} \
-          ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
-        docker push ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-        docker push ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
-    
     - name: Terraform Init
       working-directory: ./infra/azure
       run: |
@@ -177,6 +146,53 @@ jobs:
       if: github.event.inputs.terraform_action == 'apply'
       working-directory: ./infra/azure
       run: terraform apply -auto-approve tfplan
+      env:
+        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    
+    - name: Download Docker images
+      if: github.event.inputs.terraform_action == 'apply'
+      uses: actions/download-artifact@v4
+      with:
+        name: docker-images
+    
+    - name: Load Docker images
+      if: github.event.inputs.terraform_action == 'apply'
+      run: |
+        docker load < backend.tar.gz
+        docker load < frontend.tar.gz
+    
+    - name: Configure Azure Container Registry
+      if: github.event.inputs.terraform_action == 'apply'
+      run: |
+        ACR_NAME=${{ secrets.AZURE_ACR_NAME }}
+        az acr login --name $ACR_NAME
+        
+        # Tag and push backend
+        docker tag hoptranscribe-backend:${{ github.sha }} \
+          ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+        docker tag hoptranscribe-backend:${{ github.sha }} \
+          ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
+        docker push ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+        docker push ${ACR_NAME}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:latest
+        
+        # Tag and push frontend
+        docker tag hoptranscribe-frontend:${{ github.sha }} \
+          ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+        docker tag hoptranscribe-frontend:${{ github.sha }} \
+          ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
+        docker push ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+        docker push ${ACR_NAME}.azurecr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
+    
+    - name: Update Container Apps with new images
+      if: github.event.inputs.terraform_action == 'apply'
+      working-directory: ./infra/azure
+      run: |
+        # Trigger Container Apps to pull new images
+        terraform apply -auto-approve -refresh-only
       env:
         ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
         ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
