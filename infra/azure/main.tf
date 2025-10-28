@@ -40,6 +40,17 @@ resource "azurerm_log_analytics_workspace" "logs" {
   tags = var.tags
 }
 
+# Application Insights for monitoring user analytics and custom events
+resource "azurerm_application_insights" "insights" {
+  name                = "${var.project_name}-${var.environment}-insights"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  workspace_id        = azurerm_log_analytics_workspace.logs.id
+  application_type    = "web"
+  
+  tags = var.tags
+}
+
 # Container Apps Environment
 resource "azurerm_container_app_environment" "env" {
   name                       = "${var.project_name}-${var.environment}-env"
@@ -73,6 +84,11 @@ resource "azurerm_container_app" "backend" {
     value = var.openai_api_key
   }
 
+  secret {
+    name  = "appinsights-connection-string"
+    value = azurerm_application_insights.insights.connection_string
+  }
+
   template {
     min_replicas = var.backend_min_replicas
     max_replicas = var.backend_max_replicas
@@ -101,6 +117,11 @@ resource "azurerm_container_app" "backend" {
       env {
         name  = "OpenAI__Voice"
         value = var.openai_voice
+      }
+
+      env {
+        name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        secret_name = "appinsights-connection-string"
       }
 
       liveness_probe {
@@ -148,6 +169,11 @@ resource "azurerm_container_app" "frontend" {
     value = var.dockerhub_token
   }
 
+  secret {
+    name  = "appinsights-connection-string"
+    value = azurerm_application_insights.insights.connection_string
+  }
+
   template {
     min_replicas = var.frontend_min_replicas
     max_replicas = var.frontend_max_replicas
@@ -161,6 +187,11 @@ resource "azurerm_container_app" "frontend" {
       env {
         name  = "VITE_API_BASE_URL"
         value = "https://${azurerm_container_app.backend.ingress[0].fqdn}"
+      }
+
+      env {
+        name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        secret_name = "appinsights-connection-string"
       }
 
       liveness_probe {

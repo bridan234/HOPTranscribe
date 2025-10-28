@@ -54,21 +54,8 @@ export function useRealtimeWebSocket({
   const isPlayingRef = useRef(false);
 
   const handleMessage = useCallback((event: any) => {
-    console.log('🔔 [Event received]:', event.type);
-    
-    // Log full event for debugging responses and conversation items
-    if (event.type === OPENAI_EVENT_TYPES.RESPONSE_DONE || 
-        event.type === OPENAI_EVENT_TYPES.RESPONSE_OUTPUT_ITEM_ADDED || 
-        event.type === OPENAI_EVENT_TYPES.RESPONSE_OUTPUT_ITEM_DONE ||
-        event.type === OPENAI_EVENT_TYPES.CONVERSATION_ITEM_CREATED ||
-        event.type === OPENAI_EVENT_TYPES.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED) {
-      console.log('📦 [Full event]:', JSON.stringify(event, null, 2));
-    }
-    
     switch (event.type) {
       case OPENAI_EVENT_TYPES.SESSION_CREATED:
-        console.log('✅ [OpenAI] Session created successfully');
-        // Send session.update with tools after session is created
         if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
           const sessionUpdate = {
             type: OPENAI_CLIENT_EVENTS.SESSION_UPDATE,
@@ -80,19 +67,14 @@ export function useRealtimeWebSocket({
             },
           };
           websocketService.sendEvent(websocketRef.current, sessionUpdate);
-          console.log('📤 [Session update sent with tools]');
         }
         break;
 
       case OPENAI_EVENT_TYPES.SESSION_UPDATED:
-        console.log('✅ [Session] Configuration updated');
         break;
 
       case OPENAI_EVENT_TYPES.CONVERSATION_ITEM_CREATED:
-        // Only process user input, ignore assistant responses
-        console.log('📥 [Conversation item]:', event.item?.type, 'role:', event.item?.role);
         if (event.item?.type === 'message' && event.item.role === 'user') {
-          // Extract user's spoken content
           const content = event.item.content;
           if (Array.isArray(content)) {
             const inputAudio = content.find((c: any) => c.type === 'input_audio');
@@ -100,31 +82,17 @@ export function useRealtimeWebSocket({
               const userTranscript = inputAudio.transcript;
               lastTranscriptRef.current = userTranscript;
               setLastResult({ transcript: userTranscript, matches: [] } as any);
-              console.log('📝 [User said]:', userTranscript);
             }
           }
-        } else if (event.item?.role === 'assistant') {
-          console.log('🚫 [Ignoring assistant conversation item]');
         }
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_AUDIO_TRANSCRIPT_DELTA:
-        // IGNORE: These are assistant responses we don't want
-        console.log('🚫 [Ignoring assistant response delta]');
-        break;
-
       case OPENAI_EVENT_TYPES.RESPONSE_AUDIO_TRANSCRIPT_DONE:
-        // IGNORE: These are assistant responses we don't want
-        console.log('🔇 [Ignoring assistant response]:', event.transcript);
-        break;
-
       case OPENAI_EVENT_TYPES.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
-        // IGNORE: We'll get the transcript from the function call instead
-        console.log('� [Ignoring input transcription - will come from function call]');
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_OUTPUT_ITEM_DONE:
-        // Check if this is a message with function-like text content
         if (event.item?.type === 'message' && event.item?.content) {
           const itemStatus = event.item?.status;
           const textContent = Array.isArray(event.item.content) 
@@ -134,38 +102,29 @@ export function useRealtimeWebSocket({
           if (textContent?.text) {
             let jsonText = textContent.text;
             
-            // If incomplete, try to salvage by closing the JSON
+            // Salvage incomplete JSON responses by closing missing brackets
             if (itemStatus === 'incomplete') {
-              console.warn('⚠️ [Incomplete response - attempting to salvage JSON]');
-              console.log('📝 [Original text]:', jsonText);
+              console.warn('[Scripture] Salvaging incomplete JSON response');
               
-              // Try to close incomplete JSON by adding missing braces
-              // Count open/close braces to determine what's missing
               const openBraces = (jsonText.match(/{/g) || []).length;
               const closeBraces = (jsonText.match(/}/g) || []).length;
               const openBrackets = (jsonText.match(/\[/g) || []).length;
               const closeBrackets = (jsonText.match(/\]/g) || []).length;
               
-              // Add missing closing characters
               const missingBraces = openBraces - closeBraces;
               const missingBrackets = openBrackets - closeBrackets;
               
               for (let i = 0; i < missingBrackets; i++) jsonText += ']';
               for (let i = 0; i < missingBraces; i++) jsonText += '}';
               
-              console.log('🔧 [Salvaged text]:', jsonText);
             }
             
             try {
-              // Try to parse as function call JSON
               const data = JSON.parse(jsonText);
               if (data.transcript && data.matches) {
-                console.log('📖 [Scripture from text response]:', data);
-                
                 const transcript = data.transcript;
                 const matches = Array.isArray(data.matches) ? data.matches : [];
                 
-                // Filter out invalid matches (must have reference, confidence >= minConfidence)
                 const validMatches = matches.filter((match: any) => {
                   const hasReference = typeof match.reference === 'string' && match.reference.trim().length > 0;
                   const hasConfidence = typeof match.confidence === 'number' && match.confidence >= minConfidence;
@@ -184,25 +143,19 @@ export function useRealtimeWebSocket({
                     transcript: transcript,
                     matches: rankedMatches,
                   } as any);
-                  console.log('📖 [Scripture detected]:', rankedMatches.length, 'matches', itemStatus === 'incomplete' ? '(salvaged from incomplete)' : '');
                   break;
                 }
               }
             } catch (e) {
-              // Not JSON or not our function format, log and ignore
               if (itemStatus === 'incomplete') {
-                console.error('❌ [Failed to salvage incomplete JSON]:', e);
-                console.log('📝 [Failed text]:', jsonText);
+                console.error('[Scripture] Failed to salvage incomplete JSON:', e);
               }
             }
           }
-          console.log('🚫 [Ignoring assistant message]');
         }
-        // Function calls are handled in response.function_call_arguments.done
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_AUDIO_DELTA:
-        // Decode base64 audio and queue for playback
         if (event.delta) {
           try {
             const binaryString = atob(event.delta);
@@ -223,7 +176,6 @@ export function useRealtimeWebSocket({
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_AUDIO_DONE:
-        console.log('🔊 [Audio] Response audio complete');
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_FUNCTION_CALL_ARGUMENTS_DELTA: {
@@ -245,25 +197,16 @@ export function useRealtimeWebSocket({
           const transcript = typeof args.transcript === 'string' ? args.transcript : '';
           const matches = Array.isArray(args.matches) ? args.matches : [];
           
-          // Filter out invalid matches (must have reference, confidence >= minConfidence)
           const validMatches = matches.filter((match: any) => {
             const hasReference = match.reference && match.reference.trim().length > 0;
             const hasConfidence = typeof match.confidence === 'number' && match.confidence >= minConfidence;
             return hasReference && hasConfidence;
           });
           
-          // If no valid matches, ignore this function call
-          if (validMatches.length === 0) {
-            console.log('⚠️ [Scripture ignored]: No valid matches (empty references or 0 confidence)');
-            break;
-          }
+          if (validMatches.length === 0) break;
           
-          // Store the transcript separately so it appears in the UI
-          if (transcript) {
-            lastTranscriptRef.current = transcript;
-          }
+          if (transcript) lastTranscriptRef.current = transcript;
           
-          // Process matches - take up to maxReferences, already ranked by LLM
           const rankedMatches = validMatches.slice(0, maxReferences).map((match: any) => ({
             reference: match.reference,
             quote: typeof match.quote === 'string' ? match.quote : '',
@@ -271,12 +214,10 @@ export function useRealtimeWebSocket({
             confidence: match.confidence,
           }));
           
-          // Return result with all matches
           setLastResult({
             transcript: transcript || lastTranscriptRef.current,
             matches: rankedMatches,
           } as any);
-          console.log('📖 [Scripture detected]:', rankedMatches.length, 'matches');
         } catch (err) {
           console.error('Failed to parse function arguments:', err);
         }
@@ -334,11 +275,10 @@ export function useRealtimeWebSocket({
     if (!stream || !websocketRef.current) return;
 
     try {
-      // Create audio context for processing
       audioContextRef.current = new AudioContext({ sampleRate: API_CONSTANTS.AUDIO.SAMPLE_RATE });
       const source = audioContextRef.current.createMediaStreamSource(stream);
       
-      // Use ScriptProcessorNode for audio capture (deprecated but works)
+      // ScriptProcessorNode deprecated but stable for audio capture
       const processor = audioContextRef.current.createScriptProcessor(API_CONSTANTS.AUDIO.BUFFER_SIZE, API_CONSTANTS.AUDIO.CHANNELS, API_CONSTANTS.AUDIO.CHANNELS);
       
       processor.onaudioprocess = (e) => {
@@ -352,7 +292,6 @@ export function useRealtimeWebSocket({
             int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
           }
 
-          // Convert to base64
           const bytes = new Uint8Array(int16Array.buffer);
           const binaryString = String.fromCharCode(...bytes);
           const base64 = btoa(binaryString);
@@ -364,7 +303,6 @@ export function useRealtimeWebSocket({
       source.connect(processor);
       processor.connect(audioContextRef.current.destination);
       
-      console.log('🎤 [Audio] Started streaming microphone input');
     } catch (err) {
       console.error('[Audio] Failed to start streaming:', err);
     }
@@ -422,31 +360,21 @@ export function useRealtimeWebSocket({
   }, [stream, handleMessage, startAudioStreaming]);
 
   const disconnect = useCallback(() => {
-    console.log('🛑 [Disconnect] Starting disconnect process...');
-    console.log('🛑 [Disconnect] WebSocket ref:', websocketRef.current ? 'exists' : 'null');
-    console.log('🛑 [Disconnect] Audio context ref:', audioContextRef.current ? 'exists' : 'null');
-    console.log('🛑 [Disconnect] Audio player ref:', audioPlayerRef.current ? 'exists' : 'null');
     
     if (websocketRef.current) {
-      console.log('🛑 [Disconnect] Closing WebSocket connection...');
       websocketService.closeConnection(websocketRef.current);
       websocketRef.current = null;
       setWebsocket(null);
-      console.log('🛑 [Disconnect] WebSocket closed');
     }
 
     if (audioContextRef.current) {
-      console.log('🛑 [Disconnect] Closing audio context...');
       audioContextRef.current.close();
       audioContextRef.current = null;
-      console.log('🛑 [Disconnect] Audio context closed');
     }
 
     if (audioPlayerRef.current) {
-      console.log('🛑 [Disconnect] Closing audio player...');
       audioPlayerRef.current.close();
       audioPlayerRef.current = null;
-      console.log('🛑 [Disconnect] Audio player closed');
     }
 
     audioQueueRef.current = [];
@@ -454,7 +382,6 @@ export function useRealtimeWebSocket({
     setConnectionState(CONNECTION_STATES.DISCONNECTED);
     setError(null);
     setIsConnecting(false);
-    console.log('🛑 [Disconnect] Disconnect complete. State:', CONNECTION_STATES.DISCONNECTED);
   }, []);
 
   const sendMessage = useCallback((message: object) => {
@@ -472,7 +399,6 @@ export function useRealtimeWebSocket({
   // Auto-connect when stream is available
   useEffect(() => {
     if (autoConnect && stream && connectionState === CONNECTION_STATES.DISCONNECTED && !isConnecting) {
-      console.log('🔄 [Auto-connect] Triggering connection...');
       connect();
     }
   }, [autoConnect, stream, connectionState, isConnecting]);
@@ -480,7 +406,6 @@ export function useRealtimeWebSocket({
   // Update session when preferred Bible version changes
   useEffect(() => {
     if (connectionState === CONNECTION_STATES.CONNECTED && websocketRef.current) {
-      console.log('📝 [Bible Version] Updating session with new preferred version:', preferredBibleVersion);
       const sessionUpdate = {
         type: OPENAI_CLIENT_EVENTS.SESSION_UPDATE,
         session: {
@@ -494,9 +419,7 @@ export function useRealtimeWebSocket({
 
   // Disconnect when stream is removed
   useEffect(() => {
-    console.log('🔄 [Stream change] Stream:', stream ? 'available' : 'null', 'Connection:', connectionState);
     if (!stream && connectionState === CONNECTION_STATES.CONNECTED) {
-      console.log('🔄 [Stream change] Stream removed while connected - triggering disconnect');
       disconnect();
     }
   }, [stream, connectionState]);

@@ -14,10 +14,15 @@ do
     if [ ! -z "$VITE_API_BASE_URL" ]; then
       sed -i "s|__VITE_API_BASE_URL__|$VITE_API_BASE_URL|g" "$file"
     fi
+    
+    # Replace Application Insights connection string placeholder
+    if [ ! -z "$APPLICATIONINSIGHTS_CONNECTION_STRING" ]; then
+      sed -i "s|__APPLICATIONINSIGHTS_CONNECTION_STRING__|$APPLICATIONINSIGHTS_CONNECTION_STRING|g" "$file"
+    fi
   fi
 done
 
-echo "Environment variables injected successfully! ${VITE_API_BASE_URL}"
+echo "Environment variables injected successfully!"
 
 # Start nginx
 exec "$@"

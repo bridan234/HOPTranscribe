@@ -48,18 +48,13 @@ export function useMediaRecorder(options?: UseMediaRecorderOptions): UseMediaRec
   }, [options?.deviceId]);
 
   const stopRecording = useCallback(() => {
-    console.log('⏹️ [MediaRecorder] Stop recording called');
-    console.log('⏹️ [MediaRecorder] Stream exists:', stream ? 'yes' : 'no');
     
     if (stream) {
-      console.log('⏹️ [MediaRecorder] Stopping stream...');
       mediaService.stopStream(stream);
       setStream(null);
-      console.log('⏹️ [MediaRecorder] Stream stopped and cleared');
     }
     setIsRecording(false);
     setError(null);
-    console.log('⏹️ [MediaRecorder] Recording state set to false');
   }, [stream]);
 
   // Cleanup on unmount

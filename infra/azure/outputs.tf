@@ -32,3 +32,25 @@ output "log_analytics_workspace_id" {
   description = "Log Analytics Workspace ID"
   value       = azurerm_log_analytics_workspace.logs.id
 }
+
+output "application_insights_name" {
+  description = "Application Insights resource name"
+  value       = azurerm_application_insights.insights.name
+}
+
+output "application_insights_instrumentation_key" {
+  description = "Application Insights instrumentation key"
+  value       = azurerm_application_insights.insights.instrumentation_key
+  sensitive   = true
+}
+
+output "application_insights_connection_string" {
+  description = "Application Insights connection string"
+  value       = azurerm_application_insights.insights.connection_string
+  sensitive   = true
+}
+
+output "application_insights_app_id" {
+  description = "Application Insights app ID"
+  value       = azurerm_application_insights.insights.app_id
+}

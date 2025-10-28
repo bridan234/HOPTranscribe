@@ -16,9 +16,6 @@ public class SessionConfig
     [JsonPropertyName("model")]
     public string Model { get; set; } = string.Empty;
 
-    // [JsonPropertyName("modalities")]
-    // public string[]? Modalities { get; set; }
-
     [JsonPropertyName("instructions")]
     public string? Instructions { get; set; }
 
