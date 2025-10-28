@@ -55,7 +55,7 @@ variable "log_retention_days" {
 variable "backend_image_name" {
   description = "Backend container image name"
   type        = string
-  default     = "hoptranscribe-be"
+  default     = "hoptranscribe-backend"
 }
 
 variable "backend_min_replicas" {
@@ -96,7 +96,7 @@ variable "backend_memory" {
 variable "frontend_image_name" {
   description = "Frontend container image name"
   type        = string
-  default     = "hoptranscribe-fe"
+  default     = "hoptranscribe-frontend"
 }
 
 variable "frontend_min_replicas" {

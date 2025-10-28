@@ -79,7 +79,7 @@ resource "azurerm_container_app" "backend" {
 
     container {
       name   = "backend"
-      image  = "docker.io/bridan/${var.backend_image_name}:latest"
+      image  = "bridan/${var.backend_image_name}:latest"
       cpu    = var.backend_cpu
       memory = var.backend_memory
 
@@ -154,7 +154,7 @@ resource "azurerm_container_app" "frontend" {
 
     container {
       name   = "frontend"
-      image  = "docker.io/bridan/${var.frontend_image_name}:latest"
+      image  = "bridan/${var.frontend_image_name}:latest"
       cpu    = var.frontend_cpu
       memory = var.frontend_memory
 
