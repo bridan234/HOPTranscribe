@@ -94,7 +94,7 @@ variable "backend_cpu" {
 variable "backend_memory" {
   description = "Memory for backend container (e.g., 0.5Gi, 1Gi, 2Gi)"
   type        = string
-  default     = "1.5Gi"
+  default     = "1Gi"
 }
 
 # Frontend Configuration
