@@ -8,21 +8,19 @@ services:
       dockerfile: Dockerfile
     container_name: hoptranscribe-api
     ports:
-      - "5000:8080"
+      - "5001:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - OpenAI__ApiKey=${OPENAI_API_KEY}
       - OpenAI__TimeoutSeconds=30
       - OpenAI__Voice=alloy
-      - AllowedOrigins__0=http://localhost:3000
-      - AllowedOrigins__1=http://localhost
     volumes:
       - backend-logs:/app/logs
     networks:
       - hoptranscribe-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/status"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/health/status || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -37,7 +35,7 @@ services:
     ports:
       - "3000:80"
     environment:
-      - VITE_API_URL=http://localhost:5000
+      - VITE_API_URL=http://localhost:5001
     depends_on:
       backend:
         condition: service_healthy
