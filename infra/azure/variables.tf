@@ -46,9 +46,14 @@ variable "dockerhub_token" {
 
 # Logging
 variable "log_retention_days" {
-  description = "Log Analytics retention in days"
+  description = "Log Analytics retention in days (must be 7 or between 30-730)"
   type        = number
-  default     = 15
+  default     = 30
+  
+  validation {
+    condition     = var.log_retention_days == 7 || (var.log_retention_days >= 30 && var.log_retention_days <= 730)
+    error_message = "Log retention must be either 7 days (free tier) or between 30-730 days (paid retention)."
+  }
 }
 
 # Backend Configuration
