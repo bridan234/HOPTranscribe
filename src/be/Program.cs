@@ -28,13 +28,35 @@ try
     builder.Services.AddControllers();
     builder.Services.AddApplicationInsightsTelemetry();
 
+    var allowedOrigins = builder.Configuration
+        .GetSection("AllowedOrigins")
+        .Get<string[]>() ?? Array.Empty<string>();
+
     builder.Services.AddCors(options =>
     {
         options.AddPolicy(ApiConstants.PolicyNames.CorsPolicy, policy =>
         {
-            policy.AllowAnyOrigin()
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
+            if (builder.Environment.IsProduction())
+            {
+                policy.SetIsOriginAllowed(origin =>
+                      {
+                          if (Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                          {
+                              return uri.Host.EndsWith(".azurecontainerapps.io", StringComparison.OrdinalIgnoreCase);
+                          }
+                          return false;
+                      })
+                      .AllowAnyMethod()
+                      .AllowAnyHeader()
+                      .AllowCredentials();
+            }
+            else
+            {
+                // Development: allow any origin
+                policy.AllowAnyOrigin()
+                      .AllowAnyMethod()
+                      .AllowAnyHeader();
+            }
         });
     });
 
