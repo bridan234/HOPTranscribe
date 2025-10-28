@@ -5,9 +5,9 @@
 export const API_CONSTANTS = {
   // Backend API
   BACKEND: {
-    BASE_URL: '__VITE_API_BASE_URL__' !== '__VITE_API_BASE_URL__' 
-      ? '__VITE_API_BASE_URL__' 
-      : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5138'),
+    BASE_URL: '__VITE_API_BASE_URL__'.startsWith('__VITE') 
+      ? 'http://localhost:5138'
+      : '__VITE_API_BASE_URL__',
     ENDPOINTS: {
       SESSION: '/api/openai/session',
     },

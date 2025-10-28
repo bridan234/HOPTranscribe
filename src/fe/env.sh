@@ -17,7 +17,7 @@ do
   fi
 done
 
-echo "Environment variables injected successfully!"
+echo "Environment variables injected successfully! ${VITE_API_BASE_URL}"
 
 # Start nginx
 exec "$@"
