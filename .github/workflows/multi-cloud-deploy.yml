@@ -149,6 +149,37 @@ jobs:
         ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
     
+    - name: Force Container Apps to Pull Latest Images
+      if: github.event.inputs.terraform_action == 'apply'
+      working-directory: ./infra/azure
+      run: |
+        # Get resource group and app names from Terraform outputs
+        RESOURCE_GROUP=$(terraform output -raw resource_group_name)
+        BACKEND_APP="${{ github.event.inputs.environment }}-hoptranscribe-api"
+        FRONTEND_APP="${{ github.event.inputs.environment }}-hoptranscribe-web"
+        
+        # Update backend container app to trigger new revision with latest image
+        echo "Updating backend container app to pull latest image..."
+        az containerapp update \
+          --name hoptranscribe-api \
+          --resource-group $RESOURCE_GROUP \
+          --image docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hoptranscribe-backend:latest
+        
+        # Update frontend container app to trigger new revision with latest image
+        echo "Updating frontend container app to pull latest image..."
+        az containerapp update \
+          --name hoptranscribe-web \
+          --resource-group $RESOURCE_GROUP \
+          --image docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hoptranscribe-frontend:latest
+        
+        echo "✅ Container Apps updated to pull latest images"
+      env:
+        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    
     - name: Get Outputs
       if: github.event.inputs.terraform_action == 'apply'
       working-directory: ./infra/azure
@@ -156,6 +187,12 @@ jobs:
         echo "## Azure Deployment" >> $GITHUB_STEP_SUMMARY
         echo "**Frontend URL:** $(terraform output -raw frontend_url)" >> $GITHUB_STEP_SUMMARY
         echo "**Backend URL:** $(terraform output -raw backend_url)" >> $GITHUB_STEP_SUMMARY
+      env:
+        ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
     
     - name: Azure Logout
       if: always()

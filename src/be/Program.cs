@@ -39,20 +39,20 @@ try
     {
         options.AddPolicy(ApiConstants.PolicyNames.CorsPolicy, policy =>
         {
-            if (allowedOrigins.Length > 0)
-            {
-                policy.WithOrigins(allowedOrigins)
-                      .AllowAnyMethod()
-                      .AllowAnyHeader()
-                      .AllowCredentials();
-            }
-            else
-            {
+            // if (allowedOrigins.Length > 0)
+            // {
+            //     policy.WithOrigins(allowedOrigins)
+            //           .AllowAnyMethod()
+            //           .AllowAnyHeader()
+            //           .AllowCredentials();
+            // }
+            // else
+            // {
                 // No specific origins configured - allow any origin
                 policy.AllowAnyOrigin()
                       .AllowAnyMethod()
                       .AllowAnyHeader();
-            }
+            // }
         });
     });
 
