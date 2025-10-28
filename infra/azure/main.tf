@@ -103,6 +103,11 @@ resource "azurerm_container_app" "backend" {
         value = var.openai_voice
       }
 
+      env {
+        name  = "AllowedOrigins"
+        value = "https://${azurerm_container_app.frontend.ingress[0].fqdn}"
+      }
+
       liveness_probe {
         transport = "HTTP"
         port      = 8080
