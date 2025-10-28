@@ -85,7 +85,7 @@ Creates an ephemeral OpenAI Realtime API session token.
       "expiresAt": 1729548000,
       "expires_at_utc": "2025-10-21T12:00:00Z"
     },
-    "model": "gpt-4o-realtime-preview-2024-10-01"
+    "model": "gpt-4o-realtime-preview"
   },
   "message": "Session created successfully"
 }

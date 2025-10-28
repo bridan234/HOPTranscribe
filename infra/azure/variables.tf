@@ -48,7 +48,7 @@ variable "dockerhub_token" {
 variable "log_retention_days" {
   description = "Log Analytics retention in days"
   type        = number
-  default     = 30
+  default     = 15
 }
 
 # Backend Configuration
@@ -61,7 +61,7 @@ variable "backend_image_name" {
 variable "backend_min_replicas" {
   description = "Minimum number of backend replicas"
   type        = number
-  default     = 1
+  default     = 0
   
   validation {
     condition     = var.backend_min_replicas >= 0 && var.backend_min_replicas <= 30
@@ -72,7 +72,7 @@ variable "backend_min_replicas" {
 variable "backend_max_replicas" {
   description = "Maximum number of backend replicas"
   type        = number
-  default     = 3
+  default     = 2
   
   validation {
     condition     = var.backend_max_replicas >= 1 && var.backend_max_replicas <= 30
@@ -83,13 +83,13 @@ variable "backend_max_replicas" {
 variable "backend_cpu" {
   description = "CPU cores for backend container (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0)"
   type        = number
-  default     = 1.0
+  default     = 0.5
 }
 
 variable "backend_memory" {
   description = "Memory for backend container (e.g., 0.5Gi, 1Gi, 2Gi)"
   type        = string
-  default     = "2Gi"
+  default     = "1.5Gi"
 }
 
 # Frontend Configuration
@@ -102,7 +102,7 @@ variable "frontend_image_name" {
 variable "frontend_min_replicas" {
   description = "Minimum number of frontend replicas"
   type        = number
-  default     = 1
+  default     = 0
   
   validation {
     condition     = var.frontend_min_replicas >= 0 && var.frontend_min_replicas <= 30
@@ -113,7 +113,7 @@ variable "frontend_min_replicas" {
 variable "frontend_max_replicas" {
   description = "Maximum number of frontend replicas"
   type        = number
-  default     = 5
+  default     = 2
   
   validation {
     condition     = var.frontend_max_replicas >= 1 && var.frontend_max_replicas <= 30

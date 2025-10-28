@@ -6,10 +6,10 @@ public static class ApiConstants
     {
         public const string BaseUrl = "https://api.openai.com";
         public const string RealtimeClientSecretsEndpoint = "/v1/realtime/client_secrets";
-        public const string RealtimeModel = "gpt-4o-realtime-preview-2024-12-17";
+        public const string RealtimeModel = "gpt-4o-realtime-preview";
         public const string BearerScheme = "Bearer";
         public const string SessionType = "realtime";
-        public const string TranscriptionModel = "whisper-1";
+        public const string TranscriptionModel = "gpt-4o-transcribe";
     }
 
     public static class Routes

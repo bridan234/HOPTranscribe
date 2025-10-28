@@ -26,6 +26,7 @@ if (connectionString) {
       enableCorsCorrelation: true,
       enableRequestHeaderTracking: true,
       enableResponseHeaderTracking: true,
+      samplingPercentage: 50,
     }
   });
 

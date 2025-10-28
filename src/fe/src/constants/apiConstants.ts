@@ -17,7 +17,7 @@ export const API_CONSTANTS = {
   OPENAI: {
     WEBSOCKET_URL: 'wss://api.openai.com/v1/realtime',
     REALTIME_URL: 'https://api.openai.com/v1/realtime/calls',
-    MODEL: 'gpt-4o-realtime-preview-2024-12-17',
+    MODEL: 'gpt-4o-realtime-preview',
     DATA_CHANNEL_NAME: 'oai-events',
     WEBSOCKET_PROTOCOLS: {
       REALTIME: 'realtime',

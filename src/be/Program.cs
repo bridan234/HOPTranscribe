@@ -26,7 +26,11 @@ try
     );
 
     builder.Services.AddControllers();
-    builder.Services.AddApplicationInsightsTelemetry();
+    builder.Services.AddApplicationInsightsTelemetry(options =>
+    {
+        options.EnableAdaptiveSampling = true;
+        options.ConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+    });
 
     var allowedOrigins = builder.Configuration
         .GetSection("AllowedOrigins")
