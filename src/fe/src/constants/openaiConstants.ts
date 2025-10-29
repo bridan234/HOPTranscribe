@@ -167,3 +167,20 @@ export const CONNECTION_STATES = {
   FAILED: 'failed',
   CLOSED: 'closed',
 } as const;
+
+/**
+ * Content types for OpenAI events
+ */
+export const CONTENT_TYPES = {
+  INPUT_AUDIO: 'input_audio',
+  OUTPUT_TEXT: 'output_text',
+  MESSAGE: 'message',
+} as const;
+
+/**
+ * Item roles
+ */
+export const ITEM_ROLES = {
+  USER: 'user',
+  ASSISTANT: 'assistant',
+} as const;

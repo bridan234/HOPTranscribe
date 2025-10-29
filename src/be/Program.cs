@@ -69,6 +69,8 @@ try
         client.Timeout = TimeSpan.FromSeconds(30);
     });
 
+    builder.Services.AddScoped<IClientLoggingService, ClientLoggingService>();
+
     builder.Services.AddOpenApi();
     builder.Services.AddHealthChecks();
 

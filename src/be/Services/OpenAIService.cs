@@ -129,4 +129,66 @@ public class OpenAIService : IOpenAIService
             throw;
         }
     }
+
+    public async Task<string> GetChatCompletionAsync(
+        string systemPrompt,
+        string userPrompt,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation(ApiConstants.LogMessages.RequestingChatCompletion);
+
+            var request = new
+            {
+                model = ApiConstants.OpenAI.ChatModel,
+                messages = new[]
+                {
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = userPrompt }
+                },
+                temperature = ApiConstants.OpenAI.JsonRepairTemperature,
+                max_tokens = ApiConstants.OpenAI.JsonRepairMaxTokens,
+                response_format = new { type = ApiConstants.OpenAI.JsonResponseFormat }
+            };
+
+            var jsonContent = JsonSerializer.Serialize(request);
+            var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync(
+                ApiConstants.OpenAI.ChatCompletionsEndpoint,
+                httpContent,
+                cancellationToken
+            );
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError(
+                    ApiConstants.LogMessages.ChatApiError,
+                    response.StatusCode,
+                    errorContent
+                );
+                return string.Empty;
+            }
+
+            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var document = JsonDocument.Parse(responseContent);
+            
+            var content = document.RootElement
+                .GetProperty("choices")[0]
+                .GetProperty("message")
+                .GetProperty("content")
+                .GetString();
+
+            _logger.LogInformation(ApiConstants.LogMessages.ChatCompletionSuccess);
+
+            return content ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, ApiConstants.LogMessages.ErrorGettingChatCompletion);
+            return string.Empty;
+        }
+    }
 }

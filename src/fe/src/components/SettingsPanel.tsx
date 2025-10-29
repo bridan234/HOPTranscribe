@@ -202,6 +202,8 @@ export function SettingsPanel({
     
     toast.success('Settings saved successfully!');
     onClose();
+    
+    window.location.reload();
   };
 
   return (

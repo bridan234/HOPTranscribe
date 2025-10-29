@@ -9,7 +9,9 @@ import {
   getSessionInstructions, 
   getOpenAITools,
   SCRIPTURE_DETECTION,
-  SESSION_CONFIG
+  SESSION_CONFIG,
+  CONTENT_TYPES,
+  ITEM_ROLES,
 } from '../constants/openaiConstants';
 import { API_CONSTANTS } from '../constants/apiConstants';
 
@@ -55,6 +57,25 @@ export function useRealtimeWebSocket({
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
 
+  const sanitizeJsonWithLLM = async (malformedJson: string): Promise<string | null> => {
+    try {
+      const result = await apiService.sanitizeJson({
+        malformedJson,
+        context: API_CONSTANTS.JSON_SANITIZER.CONTEXT,
+      });
+
+      if (result.success && result.data?.sanitizedJson) {
+        return result.data.sanitizedJson;
+      }
+      
+      console.error('[JSON Sanitizer] API call failed:', result.error);
+      return null;
+    } catch (error) {
+      console.error('[JSON Sanitizer] Error calling sanitization API:', error);
+      return null;
+    }
+  };
+
   const handleMessage = useCallback((event: any) => {
     switch (event.type) {
       case OPENAI_EVENT_TYPES.SESSION_CREATED:
@@ -76,10 +97,10 @@ export function useRealtimeWebSocket({
         break;
 
       case OPENAI_EVENT_TYPES.CONVERSATION_ITEM_CREATED:
-        if (event.item?.type === 'message' && event.item.role === 'user') {
+        if (event.item?.type === CONTENT_TYPES.MESSAGE && event.item.role === ITEM_ROLES.USER) {
           const content = event.item.content;
           if (Array.isArray(content)) {
-            const inputAudio = content.find((c: any) => c.type === 'input_audio');
+            const inputAudio = content.find((c: any) => c.type === CONTENT_TYPES.INPUT_AUDIO);
             if (inputAudio?.transcript) {
               const userTranscript = inputAudio.transcript;
               lastTranscriptRef.current = userTranscript;
@@ -95,64 +116,64 @@ export function useRealtimeWebSocket({
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_OUTPUT_ITEM_DONE:
-        if (event.item?.type === 'message' && event.item?.content) {
-          const itemStatus = event.item?.status;
+        if (event.item?.type === CONTENT_TYPES.MESSAGE && event.item?.content) {
           const textContent = Array.isArray(event.item.content) 
-            ? event.item.content.find((c: any) => c.type === 'output_text')
-            : event.item.content.type === 'output_text' ? event.item.content : null;
+            ? event.item.content.find((c: any) => c.type === CONTENT_TYPES.OUTPUT_TEXT)
+            : event.item.content.type === CONTENT_TYPES.OUTPUT_TEXT ? event.item.content : null;
           
           if (textContent?.text) {
-            let jsonText = textContent.text;
-            
-            // Salvage incomplete JSON responses by closing missing brackets
-            if (itemStatus === 'incomplete') {
-              console.warn('[Scripture] Salvaging incomplete JSON response');
-              
-              const openBraces = (jsonText.match(/{/g) || []).length;
-              const closeBraces = (jsonText.match(/}/g) || []).length;
-              const openBrackets = (jsonText.match(/\[/g) || []).length;
-              const closeBrackets = (jsonText.match(/\]/g) || []).length;
-              
-              const missingBraces = openBraces - closeBraces;
-              const missingBrackets = openBrackets - closeBrackets;
-              
-              for (let i = 0; i < missingBrackets; i++) jsonText += ']';
-              for (let i = 0; i < missingBraces; i++) jsonText += '}';
-              
-            }
-            
-            try {
-              const data = JSON.parse(jsonText);
-              if (data.transcript && data.matches) {
-                const transcript = data.transcript;
-                const matches = Array.isArray(data.matches) ? data.matches : [];
+            // Process asynchronously to not block recording
+            (async () => {
+              try {
+                let jsonText = textContent.text;
+                let args;
                 
-                const validMatches = matches.filter((match: any) => {
-                  const hasReference = typeof match.reference === 'string' && match.reference.trim().length > 0;
-                  const hasConfidence = typeof match.confidence === 'number' && match.confidence >= minConfidence;
-                  return hasReference && hasConfidence;
-                });
-                
-                if (validMatches.length > 0) {
-                  const rankedMatches = validMatches.slice(0, maxReferences).map((match: any) => ({
-                    reference: match.reference,
-                    quote: typeof match.quote === 'string' ? match.quote : '',
-                    version: typeof match.version === 'string' ? match.version : preferredBibleVersion,
-                    confidence: match.confidence,
-                  }));
+                // First attempt: Parse as-is
+                try {
+                  args = JSON.parse(jsonText);
+                } catch (parseError) {
+                  const sanitizedJson = await sanitizeJsonWithLLM(jsonText);
                   
-                  setLastResult({
-                    transcript: transcript,
-                    matches: rankedMatches,
-                  } as any);
-                  break;
+                  if (sanitizedJson) {
+                    try {
+                      args = JSON.parse(sanitizedJson);
+                    } catch (sanitizeParseError) {
+                      console.error('[Scripture] Failed to parse even after sanitization:', sanitizeParseError);
+                      return;
+                    }
+                  } else {
+                    return;
+                  }
                 }
+                
+                if (args.transcript && args.matches) {
+                  const transcript = args.transcript;
+                  const matches = Array.isArray(args.matches) ? args.matches : [];
+                  
+                  const validMatches = matches.filter((match: any) => {
+                    const hasReference = typeof match.reference === 'string' && match.reference.trim().length > 0;
+                    const hasConfidence = typeof match.confidence === 'number' && match.confidence >= minConfidence;
+                    return hasReference && hasConfidence;
+                  });
+                  
+                  if (validMatches.length > 0) {
+                    const rankedMatches = validMatches.slice(0, maxReferences).map((match: any) => ({
+                      reference: match.reference,
+                      quote: typeof match.quote === 'string' ? match.quote : '',
+                      version: typeof match.version === 'string' ? match.version : preferredBibleVersion,
+                      confidence: match.confidence,
+                    }));
+                    
+                    setLastResult({
+                      transcript: transcript,
+                      matches: rankedMatches,
+                    } as any);
+                  }
+                }
+              } catch (err) {
+                console.error('[Scripture] Failed to process function arguments:', err);
               }
-            } catch (e) {
-              if (itemStatus === 'incomplete') {
-                console.error('[Scripture] Failed to salvage incomplete JSON:', e);
-              }
-            }
+            })();
           }
         }
         break;
@@ -190,39 +211,69 @@ export function useRealtimeWebSocket({
       }
 
       case OPENAI_EVENT_TYPES.RESPONSE_FUNCTION_CALL_ARGUMENTS_DONE:
-        try {
-          const callId = event.call_id;
-          const fullArgs = callId ? (funcArgBuffers.current[callId] || event.arguments || '{}') : (event.arguments || '{}');
-          if (callId) delete funcArgBuffers.current[callId];
+        (async () => {
+          try {
+            const callId = event.call_id;
+            const fullArgs = callId ? (funcArgBuffers.current[callId] || event.arguments || '{}') : (event.arguments || '{}');
+            if (callId) delete funcArgBuffers.current[callId];
 
-          const args = JSON.parse(fullArgs);
-          const transcript = typeof args.transcript === 'string' ? args.transcript : '';
-          const matches = Array.isArray(args.matches) ? args.matches : [];
-          
-          const validMatches = matches.filter((match: any) => {
-            const hasReference = match.reference && match.reference.trim().length > 0;
-            const hasConfidence = typeof match.confidence === 'number' && match.confidence >= minConfidence;
-            return hasReference && hasConfidence;
-          });
-          
-          if (validMatches.length === 0) break;
-          
-          if (transcript) lastTranscriptRef.current = transcript;
-          
-          const rankedMatches = validMatches.slice(0, maxReferences).map((match: any) => ({
-            reference: match.reference,
-            quote: typeof match.quote === 'string' ? match.quote : '',
-            version: typeof match.version === 'string' ? match.version : preferredBibleVersion,
-            confidence: match.confidence,
-          }));
-          
-          setLastResult({
-            transcript: transcript || lastTranscriptRef.current,
-            matches: rankedMatches,
-          } as any);
-        } catch (err) {
-          console.error('Failed to parse function arguments:', err);
-        }
+            if (!fullArgs || typeof fullArgs !== 'string') {
+              return;
+            }
+
+            const trimmedArgs = fullArgs.trim();
+            if (!trimmedArgs || trimmedArgs === '' || trimmedArgs === 'undefined') {
+              return;
+            }
+
+            let args;
+            let jsonToParse = trimmedArgs;
+            
+            try {
+              args = JSON.parse(jsonToParse);
+            } catch (parseError) {
+              const sanitizedJson = await sanitizeJsonWithLLM(trimmedArgs);
+              
+              if (sanitizedJson) {
+                try {
+                  args = JSON.parse(sanitizedJson);
+                } catch (sanitizeParseError) {
+                  console.error('[Scripture] Failed to parse even after sanitization:', sanitizeParseError);
+                  return;
+                }
+              } else {
+                return;
+              }
+            }
+
+            const transcript = typeof args.transcript === 'string' ? args.transcript : '';
+            const matches = Array.isArray(args.matches) ? args.matches : [];
+            
+            const validMatches = matches.filter((match: any) => {
+              const hasReference = match.reference && match.reference.trim().length > 0;
+              const hasConfidence = typeof match.confidence === 'number' && match.confidence >= minConfidence;
+              return hasReference && hasConfidence;
+            });
+            
+            if (validMatches.length === 0) return;
+            
+            if (transcript) lastTranscriptRef.current = transcript;
+            
+            const rankedMatches = validMatches.slice(0, maxReferences).map((match: any) => ({
+              reference: match.reference,
+              quote: typeof match.quote === 'string' ? match.quote : '',
+              version: typeof match.version === 'string' ? match.version : preferredBibleVersion,
+              confidence: match.confidence,
+            }));
+            
+            setLastResult({
+              transcript: transcript || lastTranscriptRef.current,
+              matches: rankedMatches,
+            } as any);
+          } catch (err) {
+            console.error('[Scripture] Failed to process function arguments:', err);
+          }
+        })();
         break;
 
       case OPENAI_EVENT_TYPES.ERROR:
@@ -230,7 +281,7 @@ export function useRealtimeWebSocket({
         console.error('❌ [Error]:', event);
         break;
     }
-  }, []);
+  }, [preferredBibleVersion, primaryLanguage, maxReferences, minConfidence, sanitizeJsonWithLLM]);
 
   const playAudioQueue = useCallback(async () => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) {

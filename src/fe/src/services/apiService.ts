@@ -18,11 +18,21 @@ export interface EphemeralKeyResponse {
   error: string | null;
 }
 
+export interface SanitizeJsonRequest {
+  malformedJson: string;
+  context: string;
+}
+
+export interface SanitizeJsonResponse {
+  success: boolean;
+  data: {
+    sanitizedJson: string;
+  } | null;
+  error: string | null;
+  message: string;
+}
+
 export const apiService = {
-  /**
-   * Fetch ephemeral token from backend for WebRTC connection
-   * Token expires in 60 seconds
-   */
   async getEphemeralToken(): Promise<EphemeralKeyResponse> {
     const response = await fetch(
       `${API_CONSTANTS.BACKEND.BASE_URL}${API_CONSTANTS.BACKEND.ENDPOINTS.SESSION}`,
@@ -35,6 +45,30 @@ export const apiService = {
 
     if (!response.ok) {
       throw new Error(`Failed to fetch ephemeral token: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async sanitizeJson(request: SanitizeJsonRequest): Promise<SanitizeJsonResponse> {
+    const response = await fetch(
+      `${API_CONSTANTS.BACKEND.BASE_URL}${API_CONSTANTS.BACKEND.ENDPOINTS.SANITIZE_JSON}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      }
+    );
+
+    if (!response.ok) {
+      return {
+        success: false,
+        data: null,
+        error: `HTTP ${response.status}: ${response.statusText}`,
+        message: 'Failed to sanitize JSON',
+      };
     }
 
     return response.json();
