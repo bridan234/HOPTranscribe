@@ -9,6 +9,7 @@ import { Slider } from './ui/slider';
 import { Separator } from './ui/separator';
 import { Input } from './ui/input';
 import { toast } from 'sonner';
+import { loggingService } from '../services/loggingService';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -130,7 +131,7 @@ export function SettingsPanel({
         const audioInputs = devices.filter(device => device.kind === 'audioinput');
         setAudioDevices(audioInputs);
       } catch (error) {
-        console.error('Error accessing audio devices:', error);
+        loggingService.error('Error accessing audio devices', 'Settings', error as Error);
         toast.error('Unable to access audio devices. Please check permissions.');
       }
     };

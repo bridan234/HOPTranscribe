@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../components/ui/resizable';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 import { BIBLE_VERSIONS, SCRIPTURE_DETECTION } from '../constants/openaiConstants';
+import { loggingService } from '../services/loggingService';
 
 // Type definitions
 type TranscriptionSegment = { id: string; text: string; timestamp: string };
@@ -35,7 +36,7 @@ const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : defaultValue;
   } catch (error) {
-    console.error(`Error loading ${key} from localStorage:`, error);
+    loggingService.error(`Error loading ${key} from localStorage`, 'Storage', error as Error);
     return defaultValue;
   }
 };
@@ -44,7 +45,7 @@ const saveToStorage = <T,>(key: string, value: T): void => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
-    console.error(`Error saving ${key} to localStorage:`, error);
+    loggingService.error(`Error saving ${key} to localStorage`, 'Storage', error as Error);
   }
 };
 

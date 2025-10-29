@@ -36,6 +36,7 @@ class LoggingService {
   private readonly FLUSH_INTERVAL = 5000;
   private readonly MAX_QUEUE_SIZE = 100;
   private isEnabled: boolean = true;
+  private isLogging: boolean = false;
 
   constructor() {
     this.sessionId = this.generateSessionId();
@@ -73,14 +74,15 @@ class LoggingService {
 
     if (context) {
       try {
-        entry.context = typeof context === 'string' ? context : JSON.stringify(context);
+        const contextStr = typeof context === 'string' ? context : JSON.stringify(context);
+        entry.context = contextStr.length > 5000 ? contextStr.substring(0, 5000) + '... [truncated]' : contextStr;
       } catch (e) {
-        entry.context = String(context);
+        entry.context = '[Unable to stringify context]';
       }
     }
 
     if (error && error.stack) {
-      entry.stackTrace = error.stack;
+      entry.stackTrace = error.stack.length > 2000 ? error.stack.substring(0, 2000) + '... [truncated]' : error.stack;
     }
 
     return entry;
@@ -113,10 +115,11 @@ class LoggingService {
   }
 
   private async flush(): Promise<void> {
-    if (this.logQueue.length === 0) {
+    if (this.logQueue.length === 0 || this.isLogging) {
       return;
     }
 
+    this.isLogging = true;
     const logsToSend = [...this.logQueue];
     this.logQueue = [];
 
@@ -138,10 +141,17 @@ class LoggingService {
       }
     } catch (error) {
       console.warn('Error sending logs to backend:', error);
+    } finally {
+      this.isLogging = false;
     }
   }
 
   private async sendImmediate(entry: ClientLogEntry): Promise<void> {
+    if (this.isLogging) {
+      return;
+    }
+
+    this.isLogging = true;
     try {
       const response = await fetch(
         `${API_CONSTANTS.BACKEND.BASE_URL}${API_CONSTANTS.BACKEND.ENDPOINTS.LOG}`,
@@ -160,6 +170,8 @@ class LoggingService {
       }
     } catch (error) {
       console.warn('Error sending log to backend:', error);
+    } finally {
+      this.isLogging = false;
     }
   }
 

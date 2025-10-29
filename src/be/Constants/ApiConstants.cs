@@ -7,7 +7,7 @@ public static class ApiConstants
         public const string BaseUrl = "https://api.openai.com";
         public const string RealtimeClientSecretsEndpoint = "/v1/realtime/client_secrets";
         public const string ChatCompletionsEndpoint = "/v1/chat/completions";
-        public const string RealtimeModel = "gpt-4o-realtime-preview";
+        public const string RealtimeModel = "gpt-realtime-mini-2025-10-06";
         public const string ChatModel = "gpt-4o-mini";
         public const string BearerScheme = "Bearer";
         public const string SessionType = "realtime";

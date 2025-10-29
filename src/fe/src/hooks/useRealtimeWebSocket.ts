@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiService } from '../services/apiService';
 import { websocketService } from '../services/websocketService';
+import { loggingService } from '../services/loggingService';
+import { repairJson } from '../utils/jsonRepair';
 import type { ConnectionState } from '../types/webrtc';
 import { 
   CONNECTION_STATES, 
@@ -56,7 +58,9 @@ export function useRealtimeWebSocket({
   const audioPlayerRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
-
+  const isResponseInProgress = useRef(false);
+  const lastResponseRequestTime = useRef<number>(0);
+  
   const sanitizeJsonWithLLM = async (malformedJson: string): Promise<string | null> => {
     try {
       const result = await apiService.sanitizeJson({
@@ -68,10 +72,10 @@ export function useRealtimeWebSocket({
         return result.data.sanitizedJson;
       }
       
-      console.error('[JSON Sanitizer] API call failed:', result.error);
+      loggingService.error('API call failed', 'JSON Sanitizer', undefined, result.error);
       return null;
     } catch (error) {
-      console.error('[JSON Sanitizer] Error calling sanitization API:', error);
+      loggingService.error('Error calling sanitization API', 'JSON Sanitizer', error as Error);
       return null;
     }
   };
@@ -86,7 +90,7 @@ export function useRealtimeWebSocket({
               type: SESSION_CONFIG.TYPE,
               instructions: getSessionInstructions(preferredBibleVersion, primaryLanguage),
               tools: getOpenAITools(maxReferences),
-              tool_choice: SESSION_CONFIG.TOOL_CHOICE_AUTO,
+              tool_choice: SESSION_CONFIG.TOOL_CHOICE_AUTO
             },
           };
           websocketService.sendEvent(websocketRef.current, sessionUpdate);
@@ -94,6 +98,23 @@ export function useRealtimeWebSocket({
         break;
 
       case OPENAI_EVENT_TYPES.SESSION_UPDATED:
+        break;
+
+      case OPENAI_EVENT_TYPES.INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
+        if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
+          const now = Date.now();
+          
+          if (!isResponseInProgress.current) {
+            lastResponseRequestTime.current = now;
+            websocketService.sendEvent(websocketRef.current, {
+              type: OPENAI_CLIENT_EVENTS.RESPONSE_CREATE
+            });
+          }
+        }
+        break;
+
+      case OPENAI_EVENT_TYPES.RESPONSE_CREATED:
+        isResponseInProgress.current = true;
         break;
 
       case OPENAI_EVENT_TYPES.CONVERSATION_ITEM_CREATED:
@@ -112,7 +133,6 @@ export function useRealtimeWebSocket({
 
       case OPENAI_EVENT_TYPES.RESPONSE_AUDIO_TRANSCRIPT_DELTA:
       case OPENAI_EVENT_TYPES.RESPONSE_AUDIO_TRANSCRIPT_DONE:
-      case OPENAI_EVENT_TYPES.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_OUTPUT_ITEM_DONE:
@@ -128,17 +148,16 @@ export function useRealtimeWebSocket({
                 let jsonText = textContent.text;
                 let args;
                 
-                // First attempt: Parse as-is
                 try {
                   args = JSON.parse(jsonText);
                 } catch (parseError) {
-                  const sanitizedJson = await sanitizeJsonWithLLM(jsonText);
+                  const repairedJson = repairJson(jsonText);
                   
-                  if (sanitizedJson) {
+                  if (repairedJson) {
                     try {
-                      args = JSON.parse(sanitizedJson);
-                    } catch (sanitizeParseError) {
-                      console.error('[Scripture] Failed to parse even after sanitization:', sanitizeParseError);
+                      args = JSON.parse(repairedJson);
+                    } catch (repairParseError) {
+                      loggingService.error('Failed to parse even after repair', 'Scripture', repairParseError as Error);
                       return;
                     }
                   } else {
@@ -171,7 +190,7 @@ export function useRealtimeWebSocket({
                   }
                 }
               } catch (err) {
-                console.error('[Scripture] Failed to process function arguments:', err);
+                loggingService.error('Failed to process function arguments', 'Scripture', err as Error);
               }
             })();
           }
@@ -193,7 +212,7 @@ export function useRealtimeWebSocket({
               playAudioQueue();
             }
           } catch (err) {
-            console.error('[Audio] Failed to decode audio delta:', err);
+            loggingService.error('Failed to decode audio delta', 'Audio', err as Error);
           }
         }
         break;
@@ -232,13 +251,13 @@ export function useRealtimeWebSocket({
             try {
               args = JSON.parse(jsonToParse);
             } catch (parseError) {
-              const sanitizedJson = await sanitizeJsonWithLLM(trimmedArgs);
+              const repairedJson = repairJson(trimmedArgs);
               
-              if (sanitizedJson) {
+              if (repairedJson) {
                 try {
-                  args = JSON.parse(sanitizedJson);
-                } catch (sanitizeParseError) {
-                  console.error('[Scripture] Failed to parse even after sanitization:', sanitizeParseError);
+                  args = JSON.parse(repairedJson);
+                } catch (repairParseError) {
+                  loggingService.error('Failed to parse even after repair', 'Scripture', repairParseError as Error);
                   return;
                 }
               } else {
@@ -271,17 +290,21 @@ export function useRealtimeWebSocket({
               matches: rankedMatches,
             } as any);
           } catch (err) {
-            console.error('[Scripture] Failed to process function arguments:', err);
+            loggingService.error('Failed to process function arguments', 'Scripture', err as Error);
           }
         })();
         break;
 
+      case OPENAI_EVENT_TYPES.RESPONSE_DONE:
+        isResponseInProgress.current = false;
+        break;
+
       case OPENAI_EVENT_TYPES.ERROR:
-        setError(`OpenAI error: ${JSON.stringify(event)}`);
-        console.error('❌ [Error]:', event);
+        isResponseInProgress.current = false;
+        // setError(`OpenAI error: ${JSON.stringify(event)}`);
         break;
     }
-  }, [preferredBibleVersion, primaryLanguage, maxReferences, minConfidence, sanitizeJsonWithLLM]);
+  }, [preferredBibleVersion, primaryLanguage, maxReferences, minConfidence]);
 
   const playAudioQueue = useCallback(async () => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) {
@@ -318,33 +341,25 @@ export function useRealtimeWebSocket({
         });
       }
     } catch (err) {
-      console.error('[Audio] Playback error:', err);
+      loggingService.error('Playback error', 'Audio', err as Error);
     } finally {
       isPlayingRef.current = false;
     }
   }, []);
 
-  const startAudioStreaming = useCallback(() => {
+  const startAudioStreaming = useCallback(async () => {
     if (!stream || !websocketRef.current) return;
 
     try {
       audioContextRef.current = new AudioContext({ sampleRate: API_CONSTANTS.AUDIO.SAMPLE_RATE });
+      
+      await audioContextRef.current.audioWorklet.addModule('/audio-processor.js');
       const source = audioContextRef.current.createMediaStreamSource(stream);
+      const workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-capture-processor');
       
-      // ScriptProcessorNode deprecated but stable for audio capture
-      const processor = audioContextRef.current.createScriptProcessor(API_CONSTANTS.AUDIO.BUFFER_SIZE, API_CONSTANTS.AUDIO.CHANNELS, API_CONSTANTS.AUDIO.CHANNELS);
-      
-      processor.onaudioprocess = (e) => {
+      workletNode.port.onmessage = (event) => {
         if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-          const inputData = e.inputBuffer.getChannelData(0);
-          
-          // Convert Float32 to Int16
-          const int16Array = new Int16Array(inputData.length);
-          for (let i = 0; i < inputData.length; i++) {
-            const s = Math.max(-1, Math.min(1, inputData[i]));
-            int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-          }
-
+          const int16Array = event.data;
           const bytes = new Uint8Array(int16Array.buffer);
           const binaryString = String.fromCharCode(...bytes);
           const base64 = btoa(binaryString);
@@ -353,11 +368,11 @@ export function useRealtimeWebSocket({
         }
       };
 
-      source.connect(processor);
-      processor.connect(audioContextRef.current.destination);
+      source.connect(workletNode);
+      workletNode.connect(audioContextRef.current.destination);
       
     } catch (err) {
-      console.error('[Audio] Failed to start streaming:', err);
+      loggingService.error('Failed to start streaming', 'Audio', err as Error);
     }
   }, [stream]);
 

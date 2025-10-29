@@ -4,6 +4,7 @@
 
 import { API_CONSTANTS } from '../constants/apiConstants';
 import { OPENAI_CLIENT_EVENTS } from '../constants/openaiConstants';
+import { loggingService } from './loggingService';
 
 export interface WebSocketConnectionOptions {
   ephemeralKey: string;
@@ -31,13 +32,13 @@ export const websocketService = {
         const data = JSON.parse(event.data);
         onMessage(data);
       } catch (err) {
-        console.error('[WebSocket] Failed to parse message:', err);
+        loggingService.error('Failed to parse message', 'WebSocket', err as Error);
       }
     });
 
     ws.addEventListener('close', onClose);
     ws.addEventListener('error', (event) => {
-      console.error('[WebSocket] Error:', event);
+      loggingService.error('WebSocket error', 'WebSocket', undefined, event);
       onError(event);
     });
 
@@ -48,7 +49,7 @@ export const websocketService = {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(event));
     } else {
-      console.warn('[WebSocket] Cannot send event, connection not open');
+      loggingService.warn('Cannot send event, connection not open', 'WebSocket');
     }
   },
 
