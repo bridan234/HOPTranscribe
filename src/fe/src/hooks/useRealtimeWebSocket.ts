@@ -17,6 +17,7 @@ interface UseRealtimeWebSocketProps {
   stream: MediaStream | null;
   autoConnect?: boolean;
   preferredBibleVersion: string;
+  primaryLanguage?: string;
   minConfidence?: number;
   maxReferences?: number;
 }
@@ -36,6 +37,7 @@ export function useRealtimeWebSocket({
   stream, 
   autoConnect = false,
   preferredBibleVersion,
+  primaryLanguage = 'en',
   minConfidence = SCRIPTURE_DETECTION.MIN_CONFIDENCE,
   maxReferences = SCRIPTURE_DETECTION.MAX_MATCHES
 }: UseRealtimeWebSocketProps): UseRealtimeWebSocketReturn {
@@ -61,7 +63,7 @@ export function useRealtimeWebSocket({
             type: OPENAI_CLIENT_EVENTS.SESSION_UPDATE,
             session: {
               type: SESSION_CONFIG.TYPE,
-              instructions: getSessionInstructions(preferredBibleVersion),
+              instructions: getSessionInstructions(preferredBibleVersion, primaryLanguage),
               tools: getOpenAITools(maxReferences),
               tool_choice: SESSION_CONFIG.TOOL_CHOICE_AUTO,
             },

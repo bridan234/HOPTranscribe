@@ -20,6 +20,7 @@ export function TranscriptionPage() {
   const [selectedDevice, setSelectedDevice] = useState<string>('default');
   const [bibleVersion, setBibleVersion] = useState<string>(BIBLE_VERSIONS.DEFAULT_VERSION);
   const [customVersions, setCustomVersions] = useState<string[]>([...BIBLE_VERSIONS.DEFAULT_VERSIONS]);
+  const [primaryLanguage, setPrimaryLanguage] = useState<string>('en');
   const [highlightedSegment, setHighlightedSegment] = useState<string | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -40,6 +41,7 @@ export function TranscriptionPage() {
     stream: audioStream,
     autoConnect: true,
     preferredBibleVersion: bibleVersion,
+    primaryLanguage: primaryLanguage,
     minConfidence: minConfidence / 100, // Convert percentage to decimal
     maxReferences: maxReferences,
   });
@@ -155,6 +157,8 @@ export function TranscriptionPage() {
           onBibleVersionChange={setBibleVersion}
           customVersions={customVersions}
           onCustomVersionsChange={setCustomVersions}
+          primaryLanguage={primaryLanguage}
+          onPrimaryLanguageChange={setPrimaryLanguage}
           autoScroll={autoScroll}
           onAutoScrollChange={setAutoScroll}
           showConfidence={showConfidence}

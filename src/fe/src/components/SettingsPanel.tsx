@@ -18,6 +18,8 @@ interface SettingsPanelProps {
   onBibleVersionChange: (version: string) => void;
   customVersions: string[];
   onCustomVersionsChange: (versions: string[]) => void;
+  primaryLanguage?: string;
+  onPrimaryLanguageChange?: (language: string) => void;
   // Additional settings
   autoScroll?: boolean;
   onAutoScrollChange?: (value: boolean) => void;
@@ -39,6 +41,8 @@ export function SettingsPanel({
   onBibleVersionChange,
   customVersions,
   onCustomVersionsChange,
+  primaryLanguage: initialPrimaryLanguage = 'en',
+  onPrimaryLanguageChange,
   autoScroll: initialAutoScroll = true,
   onAutoScrollChange,
   showConfidence: initialShowConfidence = true,
@@ -51,6 +55,7 @@ export function SettingsPanel({
   onMaxReferencesChange
 }: SettingsPanelProps) {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [primaryLanguage, setPrimaryLanguage] = useState(initialPrimaryLanguage);
   const [autoScroll, setAutoScroll] = useState(initialAutoScroll);
   const [showConfidence, setShowConfidence] = useState(initialShowConfidence);
   const [sensitivity, setSensitivity] = useState([initialSensitivity]);
@@ -60,6 +65,10 @@ export function SettingsPanel({
   const [editableVersions, setEditableVersions] = useState<string[]>(customVersions);
 
   // Sync internal state with prop changes
+  useEffect(() => {
+    setPrimaryLanguage(initialPrimaryLanguage);
+  }, [initialPrimaryLanguage]);
+
   useEffect(() => {
     setAutoScroll(initialAutoScroll);
   }, [initialAutoScroll]);
@@ -124,6 +133,7 @@ export function SettingsPanel({
       onBibleVersionChange(editableVersions[0]);
     }
     // Save other settings
+    onPrimaryLanguageChange?.(primaryLanguage);
     onAutoScrollChange?.(autoScroll);
     onShowConfidenceChange?.(showConfidence);
     onSensitivityChange?.(sensitivity[0]);
@@ -199,6 +209,32 @@ export function SettingsPanel({
                 />
                 <p className="text-xs text-slate-400">
                   Audio sensitivity adjustment will be available in a future update
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="primary-language">Primary Output Language</Label>
+                <Select value={primaryLanguage} onValueChange={setPrimaryLanguage}>
+                  <SelectTrigger id="primary-language">
+                    <SelectValue placeholder="Select language" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-slate-200">
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">Spanish (Español)</SelectItem>
+                    <SelectItem value="fr">French (Français)</SelectItem>
+                    <SelectItem value="de">German (Deutsch)</SelectItem>
+                    <SelectItem value="it">Italian (Italiano)</SelectItem>
+                    <SelectItem value="pt">Portuguese (Português)</SelectItem>
+                    <SelectItem value="zh">Chinese (中文)</SelectItem>
+                    <SelectItem value="ja">Japanese (日本語)</SelectItem>
+                    <SelectItem value="ko">Korean (한국어)</SelectItem>
+                    <SelectItem value="ar">Arabic (العربية)</SelectItem>
+                    <SelectItem value="hi">Hindi (हिन्दी)</SelectItem>
+                    <SelectItem value="ru">Russian (Русский)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500">
+                  Transcription output will be provided in this language
                 </p>
               </div>
             </div>

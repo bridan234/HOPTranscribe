@@ -2,7 +2,7 @@
  * Bible version constants
  */
 export const BIBLE_VERSIONS = {
-  DEFAULT_VERSIONS: ['NKJV', 'AMP', 'ESV', 'TPT', 'NLT', 'TLB', 'MSG', 'NIV'],
+  DEFAULT_VERSIONS: ['NKJV', 'AMP', 'ESV', 'TPT', 'NLT', 'TLB', 'MSG', 'NIV', 'GNT'],
   DEFAULT_VERSION: 'NKJV',
 } as const;
 
@@ -26,7 +26,12 @@ export const SESSION_CONFIG = {
 /**
  * OpenAI session instructions
  */
-export const getSessionInstructions = (preferredBibleVersion: string) => `You are a passive audio monitoring assistant for Bible scripture detection.
+export const getSessionInstructions = (preferredBibleVersion: string, primaryLanguage: string = 'en') => {
+  const languageInstruction = primaryLanguage === 'en' 
+    ? '' 
+    : `\n5. IMPORTANT: Provide the transcript field in ${getLanguageName(primaryLanguage)} language. All output text should be translated to this language.`;
+  
+  return `You are a passive audio monitoring assistant for Bible scripture detection.
 
 CRITICAL RULES:
 1. NEVER initiate responses or function calls on your own
@@ -37,7 +42,7 @@ CRITICAL RULES:
    - Paraphrases or allusions to Bible verses
    - Phrases or sentences with Biblical themes that relate to specific verses
    - Topics or concepts that connect to scripture passages
-4. Stay completely passive - no examples, greetings, or unsolicited responses
+4. Stay completely passive - no examples, greetings, or unsolicited responses${languageInstruction}
 
 When you hear ANY Bible-related speech:
 - Call detect_scripture with EXACTLY 3 most relevant scripture matches
@@ -48,6 +53,28 @@ When you hear ANY Bible-related speech:
 - Even if not a direct quote, find verses that relate to what was said
 
 For non-Bible-related audio: Do nothing.`;
+};
+
+/**
+ * Get human-readable language name
+ */
+const getLanguageName = (languageCode: string): string => {
+  const languageNames: Record<string, string> = {
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'it': 'Italian',
+    'pt': 'Portuguese',
+    'zh': 'Chinese',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'ar': 'Arabic',
+    'hi': 'Hindi',
+    'ru': 'Russian',
+  };
+  return languageNames[languageCode] || 'English';
+};
 
 /**
  * OpenAI tool definitions
@@ -82,7 +109,7 @@ export const getOpenAITools = (maxReferences: number = SCRIPTURE_DETECTION.MAX_M
               },
               version: {
                 type: 'string',
-                description: 'Bible version/translation (KJV, NIV, ESV, NKJV, NLT, NASB, etc.)',
+                description: 'Bible version/translation (KJV, NIV, ESV, NKJV, NLT, NASB, GNT, etc.)',
               },
               confidence: {
                 type: 'number',
