@@ -20,6 +20,8 @@ interface SettingsPanelProps {
   onCustomVersionsChange: (versions: string[]) => void;
   primaryLanguage?: string;
   onPrimaryLanguageChange?: (language: string) => void;
+  customLanguages?: Array<{ code: string; name: string }>;
+  onCustomLanguagesChange?: (languages: Array<{ code: string; name: string }>) => void;
   // Additional settings
   autoScroll?: boolean;
   onAutoScrollChange?: (value: boolean) => void;
@@ -43,6 +45,8 @@ export function SettingsPanel({
   onCustomVersionsChange,
   primaryLanguage: initialPrimaryLanguage = 'en',
   onPrimaryLanguageChange,
+  customLanguages: initialCustomLanguages = [],
+  onCustomLanguagesChange,
   autoScroll: initialAutoScroll = true,
   onAutoScrollChange,
   showConfidence: initialShowConfidence = true,
@@ -56,6 +60,9 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [primaryLanguage, setPrimaryLanguage] = useState(initialPrimaryLanguage);
+  const [customLanguages, setCustomLanguages] = useState<Array<{ code: string; name: string }>>(initialCustomLanguages);
+  const [newLanguageCode, setNewLanguageCode] = useState('');
+  const [newLanguageName, setNewLanguageName] = useState('');
   const [autoScroll, setAutoScroll] = useState(initialAutoScroll);
   const [showConfidence, setShowConfidence] = useState(initialShowConfidence);
   const [sensitivity, setSensitivity] = useState([initialSensitivity]);
@@ -64,10 +71,33 @@ export function SettingsPanel({
   const [newVersion, setNewVersion] = useState('');
   const [editableVersions, setEditableVersions] = useState<string[]>(customVersions);
 
+  // Default languages
+  const defaultLanguages = [
+    { code: 'en', name: 'English' },
+    { code: 'es', name: 'Spanish (Español)' },
+    { code: 'fr', name: 'French (Français)' },
+    { code: 'de', name: 'German (Deutsch)' },
+    { code: 'it', name: 'Italian (Italiano)' },
+    { code: 'pt', name: 'Portuguese (Português)' },
+    { code: 'zh', name: 'Chinese (中文)' },
+    { code: 'ja', name: 'Japanese (日本語)' },
+    { code: 'ko', name: 'Korean (한국어)' },
+    { code: 'ar', name: 'Arabic (العربية)' },
+    { code: 'hi', name: 'Hindi (हिन्दी)' },
+    { code: 'ru', name: 'Russian (Русский)' },
+  ];
+
+  // Combine default and custom languages
+  const allLanguages = [...defaultLanguages, ...customLanguages];
+
   // Sync internal state with prop changes
   useEffect(() => {
     setPrimaryLanguage(initialPrimaryLanguage);
   }, [initialPrimaryLanguage]);
+
+  useEffect(() => {
+    setCustomLanguages(initialCustomLanguages);
+  }, [initialCustomLanguages]);
 
   useEffect(() => {
     setAutoScroll(initialAutoScroll);
@@ -126,12 +156,49 @@ export function SettingsPanel({
     }
   };
 
+  const handleAddLanguage = () => {
+    const code = newLanguageCode.trim().toLowerCase();
+    const name = newLanguageName.trim();
+    
+    if (!code || !name) {
+      toast.error('Please provide both language code and name');
+      return;
+    }
+    
+    if (code.length !== 2) {
+      toast.error('Language code must be 2 letters (e.g., "sw" for Swahili)');
+      return;
+    }
+    
+    // Check if code already exists in default or custom languages
+    if (allLanguages.some(lang => lang.code === code)) {
+      toast.error('This language code already exists');
+      return;
+    }
+    
+    setCustomLanguages([...customLanguages, { code, name }]);
+    setNewLanguageCode('');
+    setNewLanguageName('');
+    toast.success(`Added ${name} (${code})`);
+  };
+
+  const handleRemoveLanguage = (code: string) => {
+    setCustomLanguages(customLanguages.filter(lang => lang.code !== code));
+    // If current language was removed, switch to English
+    if (primaryLanguage === code) {
+      setPrimaryLanguage('en');
+    }
+    toast.success('Language removed');
+  };
+
   const handleSaveSettings = () => {
     onCustomVersionsChange(editableVersions);
     // If current selected version was removed, switch to first available
     if (!editableVersions.includes(bibleVersion)) {
       onBibleVersionChange(editableVersions[0]);
     }
+    // Save custom languages
+    onCustomLanguagesChange?.(customLanguages);
     // Save other settings
     onPrimaryLanguageChange?.(primaryLanguage);
     onAutoScrollChange?.(autoScroll);
@@ -218,23 +285,69 @@ export function SettingsPanel({
                   <SelectTrigger id="primary-language">
                     <SelectValue placeholder="Select language" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="es">Spanish (Español)</SelectItem>
-                    <SelectItem value="fr">French (Français)</SelectItem>
-                    <SelectItem value="de">German (Deutsch)</SelectItem>
-                    <SelectItem value="it">Italian (Italiano)</SelectItem>
-                    <SelectItem value="pt">Portuguese (Português)</SelectItem>
-                    <SelectItem value="zh">Chinese (中文)</SelectItem>
-                    <SelectItem value="ja">Japanese (日本語)</SelectItem>
-                    <SelectItem value="ko">Korean (한국어)</SelectItem>
-                    <SelectItem value="ar">Arabic (العربية)</SelectItem>
-                    <SelectItem value="hi">Hindi (हिन्दी)</SelectItem>
-                    <SelectItem value="ru">Russian (Русский)</SelectItem>
+                  <SelectContent className="bg-white border-slate-200 max-h-[300px]">
+                    {allLanguages.map((lang) => (
+                      <SelectItem key={lang.code} value={lang.code}>
+                        {lang.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-slate-500">
                   Transcription output will be provided in this language
+                </p>
+              </div>
+
+              {/* Manage Custom Languages */}
+              {customLanguages.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Custom Languages</Label>
+                  <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2 max-h-32 overflow-y-auto">
+                    {customLanguages.map((lang) => (
+                      <div key={lang.code} className="flex items-center justify-between bg-white px-3 py-2 rounded border border-slate-200">
+                        <span className="text-sm">{lang.name} ({lang.code})</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveLanguage(lang.code)}
+                          className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Add Custom Language</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Code (e.g., sw)"
+                    value={newLanguageCode}
+                    onChange={(e) => setNewLanguageCode(e.target.value)}
+                    className="w-24"
+                    maxLength={2}
+                  />
+                  <Input
+                    placeholder="Name (e.g., Swahili)"
+                    value={newLanguageName}
+                    onChange={(e) => setNewLanguageName(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddLanguage()}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={handleAddLanguage}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Add languages using ISO 639-1 codes (e.g., "sw" for Swahili, "am" for Amharic)
                 </p>
               </div>
             </div>
