@@ -15,23 +15,76 @@ type TranscriptionSegment = { id: string; text: string; timestamp: string };
 type ScriptureRef = { id: string; reference: string; text: string; confidence: number; version: string };
 type SegmentReferences = { segmentId: string; timestamp: string; references: ScriptureRef[] };
 
+// LocalStorage keys
+const STORAGE_KEYS = {
+  SELECTED_DEVICE: 'hoptranscribe_selectedDevice',
+  BIBLE_VERSION: 'hoptranscribe_bibleVersion',
+  CUSTOM_VERSIONS: 'hoptranscribe_customVersions',
+  PRIMARY_LANGUAGE: 'hoptranscribe_primaryLanguage',
+  CUSTOM_LANGUAGES: 'hoptranscribe_customLanguages',
+  AUTO_SCROLL: 'hoptranscribe_autoScroll',
+  SHOW_CONFIDENCE: 'hoptranscribe_showConfidence',
+  SENSITIVITY: 'hoptranscribe_sensitivity',
+  MIN_CONFIDENCE: 'hoptranscribe_minConfidence',
+  MAX_REFERENCES: 'hoptranscribe_maxReferences',
+};
+
+// Helper functions for localStorage
+const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (error) {
+    console.error(`Error loading ${key} from localStorage:`, error);
+    return defaultValue;
+  }
+};
+
+const saveToStorage = <T,>(key: string, value: T): void => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`Error saving ${key} to localStorage:`, error);
+  }
+};
+
 export function TranscriptionPage() {
   const [showSettings, setShowSettings] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState<string>('default');
-  const [bibleVersion, setBibleVersion] = useState<string>(BIBLE_VERSIONS.DEFAULT_VERSION);
-  const [customVersions, setCustomVersions] = useState<string[]>([...BIBLE_VERSIONS.DEFAULT_VERSIONS]);
-  const [primaryLanguage, setPrimaryLanguage] = useState<string>('English');
-  const [customLanguages, setCustomLanguages] = useState<Array<{ code: string; name: string }>>([]);
+  const [selectedDevice, setSelectedDevice] = useState<string>(() => 
+    loadFromStorage(STORAGE_KEYS.SELECTED_DEVICE, 'default')
+  );
+  const [bibleVersion, setBibleVersion] = useState<string>(() => 
+    loadFromStorage(STORAGE_KEYS.BIBLE_VERSION, BIBLE_VERSIONS.DEFAULT_VERSION)
+  );
+  const [customVersions, setCustomVersions] = useState<string[]>(() => 
+    loadFromStorage(STORAGE_KEYS.CUSTOM_VERSIONS, [...BIBLE_VERSIONS.DEFAULT_VERSIONS])
+  );
+  const [primaryLanguage, setPrimaryLanguage] = useState<string>(() => 
+    loadFromStorage(STORAGE_KEYS.PRIMARY_LANGUAGE, 'English')
+  );
+  const [customLanguages, setCustomLanguages] = useState<Array<{ code: string; name: string }>>(() => 
+    loadFromStorage(STORAGE_KEYS.CUSTOM_LANGUAGES, [])
+  );
   const [highlightedSegment, setHighlightedSegment] = useState<string | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   
   // Settings state
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [showConfidence, setShowConfidence] = useState(true);
-  const [sensitivity, setSensitivity] = useState(75);
-  const [minConfidence, setMinConfidence] = useState(SCRIPTURE_DETECTION.MIN_CONFIDENCE * 100);
-  const [maxReferences, setMaxReferences] = useState<number>(SCRIPTURE_DETECTION.MAX_MATCHES);
+  const [autoScroll, setAutoScroll] = useState(() => 
+    loadFromStorage(STORAGE_KEYS.AUTO_SCROLL, true)
+  );
+  const [showConfidence, setShowConfidence] = useState(() => 
+    loadFromStorage(STORAGE_KEYS.SHOW_CONFIDENCE, true)
+  );
+  const [sensitivity, setSensitivity] = useState(() => 
+    loadFromStorage(STORAGE_KEYS.SENSITIVITY, 75)
+  );
+  const [minConfidence, setMinConfidence] = useState(() => 
+    loadFromStorage(STORAGE_KEYS.MIN_CONFIDENCE, SCRIPTURE_DETECTION.MIN_CONFIDENCE * 100)
+  );
+  const [maxReferences, setMaxReferences] = useState<number>(() => 
+    loadFromStorage(STORAGE_KEYS.MAX_REFERENCES, SCRIPTURE_DETECTION.MAX_MATCHES)
+  );
 
   // Transcription data state
   const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
@@ -48,6 +101,47 @@ export function TranscriptionPage() {
   });
 
   const clock = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  // Persist settings to localStorage
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.SELECTED_DEVICE, selectedDevice);
+  }, [selectedDevice]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.BIBLE_VERSION, bibleVersion);
+  }, [bibleVersion]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.CUSTOM_VERSIONS, customVersions);
+  }, [customVersions]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.PRIMARY_LANGUAGE, primaryLanguage);
+  }, [primaryLanguage]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.CUSTOM_LANGUAGES, customLanguages);
+  }, [customLanguages]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.AUTO_SCROLL, autoScroll);
+  }, [autoScroll]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.SHOW_CONFIDENCE, showConfidence);
+  }, [showConfidence]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.SENSITIVITY, sensitivity);
+  }, [sensitivity]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.MIN_CONFIDENCE, minConfidence);
+  }, [minConfidence]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.MAX_REFERENCES, maxReferences);
+  }, [maxReferences]);
 
   // Append new segments and references when results arrive
   useEffect(() => {
