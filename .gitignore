@@ -69,3 +69,4 @@ appsettings.Development.json
 **/override.tf.json
 **/*_override.tf
 **/*_override.tf.json
+docs/application-insights-queries.md
