@@ -26,10 +26,10 @@ export const SESSION_CONFIG = {
 /**
  * OpenAI session instructions
  */
-export const getSessionInstructions = (preferredBibleVersion: string, primaryLanguage: string = 'en') => {
-  const languageInstruction = primaryLanguage === 'en' 
+export const getSessionInstructions = (preferredBibleVersion: string, primaryLanguage: string = 'English') => {
+  const languageInstruction = primaryLanguage === 'English' 
     ? '' 
-    : `\n5. IMPORTANT: Provide the transcript field in ${getLanguageName(primaryLanguage)} language. All output text should be translated to this language.`;
+    : `\n5. IMPORTANT: Provide the transcript field in ${primaryLanguage} language. All output text should be translated to this language.`;
   
   return `You are a passive audio monitoring assistant for Bible scripture detection.
 
@@ -53,27 +53,6 @@ When you hear ANY Bible-related speech:
 - Even if not a direct quote, find verses that relate to what was said
 
 For non-Bible-related audio: Do nothing.`;
-};
-
-/**
- * Get human-readable language name
- */
-const getLanguageName = (languageCode: string): string => {
-  const languageNames: Record<string, string> = {
-    'en': 'English',
-    'es': 'Spanish',
-    'fr': 'French',
-    'de': 'German',
-    'it': 'Italian',
-    'pt': 'Portuguese',
-    'zh': 'Chinese',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'ar': 'Arabic',
-    'hi': 'Hindi',
-    'ru': 'Russian',
-  };
-  return languageNames[languageCode] || 'English';
 };
 
 /**

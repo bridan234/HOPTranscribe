@@ -43,7 +43,7 @@ export function SettingsPanel({
   onBibleVersionChange,
   customVersions,
   onCustomVersionsChange,
-  primaryLanguage: initialPrimaryLanguage = 'en',
+  primaryLanguage: initialPrimaryLanguage = 'English',
   onPrimaryLanguageChange,
   customLanguages: initialCustomLanguages = [],
   onCustomLanguagesChange,
@@ -61,7 +61,6 @@ export function SettingsPanel({
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [primaryLanguage, setPrimaryLanguage] = useState(initialPrimaryLanguage);
   const [customLanguages, setCustomLanguages] = useState<Array<{ code: string; name: string }>>(initialCustomLanguages);
-  const [newLanguageCode, setNewLanguageCode] = useState('');
   const [newLanguageName, setNewLanguageName] = useState('');
   const [autoScroll, setAutoScroll] = useState(initialAutoScroll);
   const [showConfidence, setShowConfidence] = useState(initialShowConfidence);
@@ -73,18 +72,18 @@ export function SettingsPanel({
 
   // Default languages
   const defaultLanguages = [
-    { code: 'en', name: 'English' },
-    { code: 'es', name: 'Spanish (Español)' },
-    { code: 'fr', name: 'French (Français)' },
-    { code: 'de', name: 'German (Deutsch)' },
-    { code: 'it', name: 'Italian (Italiano)' },
-    { code: 'pt', name: 'Portuguese (Português)' },
-    { code: 'zh', name: 'Chinese (中文)' },
-    { code: 'ja', name: 'Japanese (日本語)' },
-    { code: 'ko', name: 'Korean (한국어)' },
-    { code: 'ar', name: 'Arabic (العربية)' },
-    { code: 'hi', name: 'Hindi (हिन्दी)' },
-    { code: 'ru', name: 'Russian (Русский)' },
+    { code: 'English', name: 'English' },
+    { code: 'Spanish', name: 'Spanish (Español)' },
+    { code: 'French', name: 'French (Français)' },
+    { code: 'German', name: 'German (Deutsch)' },
+    { code: 'Italian', name: 'Italian (Italiano)' },
+    { code: 'Portuguese', name: 'Portuguese (Português)' },
+    { code: 'Chinese', name: 'Chinese (中文)' },
+    { code: 'Japanese', name: 'Japanese (日本語)' },
+    { code: 'Korean', name: 'Korean (한국어)' },
+    { code: 'Arabic', name: 'Arabic (العربية)' },
+    { code: 'Hindi', name: 'Hindi (हिन्दी)' },
+    { code: 'Russian', name: 'Russian (Русский)' },
   ];
 
   // Combine default and custom languages
@@ -157,36 +156,30 @@ export function SettingsPanel({
   };
 
   const handleAddLanguage = () => {
-    const code = newLanguageCode.trim().toLowerCase();
     const name = newLanguageName.trim();
     
-    if (!code || !name) {
-      toast.error('Please provide both language code and name');
+    if (!name) {
+      toast.error('Please provide a language name');
       return;
     }
     
-    if (code.length !== 2) {
-      toast.error('Language code must be 2 letters (e.g., "sw" for Swahili)');
-      return;
-    }
+    const code = name;
     
-    // Check if code already exists in default or custom languages
-    if (allLanguages.some(lang => lang.code === code)) {
-      toast.error('This language code already exists');
+    if (allLanguages.some(lang => lang.name.toLowerCase() === name.toLowerCase())) {
+      toast.error('This language already exists');
       return;
     }
     
     setCustomLanguages([...customLanguages, { code, name }]);
-    setNewLanguageCode('');
     setNewLanguageName('');
-    toast.success(`Added ${name} (${code})`);
+    toast.success(`Added ${name}`);
   };
 
   const handleRemoveLanguage = (code: string) => {
     setCustomLanguages(customLanguages.filter(lang => lang.code !== code));
     // If current language was removed, switch to English
     if (primaryLanguage === code) {
-      setPrimaryLanguage('en');
+      setPrimaryLanguage('English');
     }
     toast.success('Language removed');
   };
@@ -305,7 +298,7 @@ export function SettingsPanel({
                   <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2 max-h-32 overflow-y-auto">
                     {customLanguages.map((lang) => (
                       <div key={lang.code} className="flex items-center justify-between bg-white px-3 py-2 rounded border border-slate-200">
-                        <span className="text-sm">{lang.name} ({lang.code})</span>
+                        <span className="text-sm">{lang.name}</span>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -324,14 +317,7 @@ export function SettingsPanel({
                 <Label>Add Custom Language</Label>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Code (e.g., sw)"
-                    value={newLanguageCode}
-                    onChange={(e) => setNewLanguageCode(e.target.value)}
-                    className="w-24"
-                    maxLength={2}
-                  />
-                  <Input
-                    placeholder="Name (e.g., Swahili)"
+                    placeholder="Language name (e.g., Swahili, Amharic)"
                     value={newLanguageName}
                     onChange={(e) => setNewLanguageName(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddLanguage()}
@@ -347,7 +333,7 @@ export function SettingsPanel({
                   </Button>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Add languages using ISO 639-1 codes (e.g., "sw" for Swahili, "am" for Amharic)
+                  Add any language by name (e.g., Swahili, Amharic, Yoruba, Tamil)
                 </p>
               </div>
             </div>
