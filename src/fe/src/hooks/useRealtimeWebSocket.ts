@@ -60,25 +60,6 @@ export function useRealtimeWebSocket({
   const isPlayingRef = useRef(false);
   const isResponseInProgress = useRef(false);
   const lastResponseRequestTime = useRef<number>(0);
-  
-  const sanitizeJsonWithLLM = async (malformedJson: string): Promise<string | null> => {
-    try {
-      const result = await apiService.sanitizeJson({
-        malformedJson,
-        context: API_CONSTANTS.JSON_SANITIZER.CONTEXT,
-      });
-
-      if (result.success && result.data?.sanitizedJson) {
-        return result.data.sanitizedJson;
-      }
-      
-      loggingService.error('API call failed', 'JSON Sanitizer', undefined, result.error);
-      return null;
-    } catch (error) {
-      loggingService.error('Error calling sanitization API', 'JSON Sanitizer', error as Error);
-      return null;
-    }
-  };
 
   const handleMessage = useCallback((event: any) => {
     switch (event.type) {
@@ -104,7 +85,8 @@ export function useRealtimeWebSocket({
         if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
           const now = Date.now();
           
-          if (!isResponseInProgress.current) {
+          if (!isResponseInProgress.current && (now - lastResponseRequestTime.current) > 500) {
+            isResponseInProgress.current = true;
             lastResponseRequestTime.current = now;
             websocketService.sendEvent(websocketRef.current, {
               type: OPENAI_CLIENT_EVENTS.RESPONSE_CREATE
@@ -300,8 +282,12 @@ export function useRealtimeWebSocket({
         break;
 
       case OPENAI_EVENT_TYPES.ERROR:
-        isResponseInProgress.current = false;
-        // setError(`OpenAI error: ${JSON.stringify(event)}`);
+        const errorMessage = event.error?.message || '';
+        
+        if (!errorMessage.includes('already has an active response in progress')) {
+          isResponseInProgress.current = false;
+        }
+        loggingService.error('OpenAI error', 'WebSocket', new Error(errorMessage || JSON.stringify(event)));
         break;
     }
   }, [preferredBibleVersion, primaryLanguage, maxReferences, minConfidence]);

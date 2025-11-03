@@ -11,21 +11,7 @@ import { toast, Toaster } from 'sonner';
 
 type AppView = 'history' | 'session';
 
-interface TranscriptionPageProps {
-  selectedDevice: string;
-  bibleVersion: string;
-  primaryLanguage: string;
-  minConfidence: number;
-  maxReferences: number;
-}
-
-export default function TranscriptionPage({ 
-  selectedDevice,
-  bibleVersion,
-  primaryLanguage,
-  minConfidence,
-  maxReferences
-}: TranscriptionPageProps) {
+export default function TranscriptionPage() {
   const [currentView, setCurrentView] = useState<AppView>('history');
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
@@ -109,22 +95,32 @@ export default function TranscriptionPage({
       <Toaster position="top-right" />
       
       {currentView === 'history' ? (
-        <div className="max-w-6xl mx-auto">
+        <div className="container mx-auto py-8 px-4 max-w-6xl">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2">Church Transcription</h1>
+            <p className="text-gray-600">
+              Real-time audio transcription with AI-powered scripture reference detection
+            </p>
+          </div>
+
           {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-6 sm:mb-8">
+          <div className="flex gap-3 mb-8">
             <Button 
               onClick={() => setNewSessionDialogOpen(true)}
-              className="gap-2 w-full sm:w-auto justify-center"
+              size="lg"
+              className="gap-2"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-5 h-5" />
               Start New Session
             </Button>
             <Button 
               onClick={() => setJoinSessionDialogOpen(true)}
               variant="outline"
-              className="gap-2 w-full sm:w-auto justify-center"
+              size="lg"
+              className="gap-2"
             >
-              <LogIn className="w-4 h-4" />
+              <LogIn className="w-5 h-5" />
               Join Ongoing Session
             </Button>
           </div>
@@ -141,11 +137,6 @@ export default function TranscriptionPage({
           isReadOnly={isReadOnly}
           onBack={handleBackToHistory}
           onUpdateSession={handleUpdateSession}
-          selectedDevice={selectedDevice}
-          bibleVersion={bibleVersion}
-          primaryLanguage={primaryLanguage}
-          minConfidence={minConfidence}
-          maxReferences={maxReferences}
         />
       ) : null}
 

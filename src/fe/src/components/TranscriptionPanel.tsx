@@ -1,6 +1,6 @@
 import { ScrollArea } from './ui/scroll-area';
-import { FileText } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { FileText, MessageSquare } from 'lucide-react';
+import { Badge } from './ui/badge';
 
 interface TranscriptionSegment {
   id: string;
@@ -13,7 +13,7 @@ interface TranscriptionPanelProps {
   isRecording: boolean;
   highlightedSegment: string | null;
   onSegmentHover: (segmentId: string | null) => void;
-  autoScroll?: boolean;
+  onSegmentClick?: (segmentId: string) => void;
 }
 
 export function TranscriptionPanel({ 
@@ -21,87 +21,91 @@ export function TranscriptionPanel({
   isRecording,
   highlightedSegment,
   onSegmentHover,
-  autoScroll = true
+  onSegmentClick
 }: TranscriptionPanelProps) {
-  const scrollAreaRef = useRef<React.ElementRef<'div'>>(null);
-
-  // Auto-scroll to top when new segments arrive
-  useEffect(() => {
-    if (autoScroll && segments.length > 0 && scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = 0;
-      }
-    }
-  }, [segments, autoScroll]);
-
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-200 bg-white">
-        <div className="flex items-center gap-2 mb-1">
-          <FileText className="w-5 h-5 text-slate-600" />
-          <h2 className="text-slate-900">Live Transcription</h2>
+    <div className="h-full flex flex-col bg-gradient-to-br from-background via-background to-[#D4C9BE]/10">
+      {/* Modern Header */}
+      <div className="px-6 py-6 border-b border-border backdrop-blur-sm bg-background/80">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#5a5550] to-[#030303] flex items-center justify-center shadow-lg shadow-[#030303]/20">
+            <MessageSquare className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-foreground">Transcription</h2>
+            <p className="text-sm text-muted-foreground">
+              Click to view references
+            </p>
+          </div>
         </div>
-        <p className="text-sm text-slate-600">
-          Real-time speech-to-text • Hover to see matched references
-        </p>
       </div>
 
       {/* Transcription Content */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-y-auto bg-slate-50">
-        <div className="p-6 space-y-4">
+      <ScrollArea className="flex-1 h-0">
+        <div className="p-4 space-y-3">
           {segments.length > 0 ? (
             <>
-              {segments.map((segment) => (
-                <div 
-                  key={segment.id}
-                  className={`p-4 rounded-lg transition-all ${
-                    highlightedSegment === segment.id
-                      ? 'bg-blue-100 border-2 border-blue-400 shadow-md'
-                      : 'bg-white border border-slate-200'
-                  }`}
-                  onMouseEnter={() => onSegmentHover(segment.id)}
-                  onMouseLeave={() => onSegmentHover(null)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-slate-500">{segment.timestamp}</span>
-                    {highlightedSegment === segment.id && (
-                      <span className="text-xs text-blue-600 px-2 py-1 bg-blue-50 rounded">
-                        Has scripture reference
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-slate-700 leading-relaxed">
-                    {segment.text}
-                  </p>
-                </div>
-              ))}
-              
               {isRecording && (
-                <div className="p-4 rounded-lg bg-white border border-slate-200 border-dashed">
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="rounded-xl border-2 border-dashed border-border bg-card/60 backdrop-blur-sm p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1.5">
+                      <span className="w-2 h-2 bg-[#123458] dark:bg-[#D4C9BE] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-[#123458] dark:bg-[#D4C9BE] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-[#123458] dark:bg-[#D4C9BE] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <span className="text-sm text-slate-500">Listening...</span>
+                    <span className="text-sm text-muted-foreground">Listening and transcribing...</span>
                   </div>
                 </div>
               )}
+              
+              {segments.map((segment) => {
+                const isHighlighted = highlightedSegment === segment.id;
+                
+                return (
+                  <div 
+                    key={segment.id}
+                    className={`group relative rounded-xl border transition-all duration-300 cursor-pointer ${
+                      isHighlighted
+                        ? 'border-[#123458] bg-gradient-to-br from-[#D4C9BE]/40 to-[#F1EFEC] dark:from-[#123458]/60 dark:to-[#2a3f5c] shadow-lg shadow-[#123458]/20 scale-[1.02]'
+                        : 'border-border bg-card/80 backdrop-blur-sm hover:border-[#D4C9BE] hover:shadow-md'
+                    }`}
+                    onMouseEnter={() => onSegmentHover(segment.id)}
+                    onMouseLeave={() => onSegmentHover(null)}
+                    onClick={() => onSegmentClick?.(segment.id)}
+                  >
+                    <div className="p-4">
+                      <p className={`text-sm leading-relaxed transition-colors ${
+                        isHighlighted ? 'text-foreground' : 'text-muted-foreground'
+                      }`}>
+                        {segment.text}
+                      </p>
+                      
+                      {isHighlighted && (
+                        <div className="mt-3 pt-3 border-t border-[#D4C9BE]/50">
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs border-[#123458] text-[#123458] dark:text-[#D4C9BE] bg-[#D4C9BE]/30 dark:bg-[#123458]/30"
+                          >
+                            Scripture references shown
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </>
           ) : (
-            <div className="h-full flex items-center justify-center py-16">
+            <div className="h-full flex items-center justify-center py-32">
               <div className="text-center">
-                <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                  <FileText className="w-8 h-8 text-slate-300" />
+                <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center mx-auto mb-6 shadow-lg">
+                  <FileText className="w-10 h-10 text-muted-foreground" />
                 </div>
-                <p className="text-slate-500">No transcription yet</p>
-                <p className="text-sm text-slate-400 mt-2">
+                <h3 className="text-foreground mb-2">No transcription yet</h3>
+                <p className="text-sm text-muted-foreground max-w-xs mx-auto">
                   {isRecording 
                     ? 'Transcription will appear here shortly...' 
-                    : 'Click "Start" to begin recording and transcription'}
+                    : 'Start recording to begin live transcription'}
                 </p>
               </div>
             </div>

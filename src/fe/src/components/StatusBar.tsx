@@ -1,7 +1,8 @@
-import { Mic, MicOff, Circle, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Circle, AlertCircle, Square } from 'lucide-react';
 import { Button } from './ui/button';
 import { useMediaRecorder } from '../hooks/useMediaRecorder';
 import { useEffect, useState } from 'react';
+import { Badge } from './ui/badge';
 
 interface StatusBarProps {
   onStreamChange?: (stream: MediaStream | null) => void;
@@ -9,6 +10,8 @@ interface StatusBarProps {
   selectedDevice?: string;
   referenceCount?: number;
   wordCount?: number;
+  hasActiveSession?: boolean;
+  onSessionEnd?: () => void;
 }
 
 export function StatusBar({ 
@@ -16,7 +19,9 @@ export function StatusBar({
   onRecordingChange, 
   selectedDevice,
   referenceCount = 0,
-  wordCount = 0
+  wordCount = 0,
+  hasActiveSession = false,
+  onSessionEnd,
 }: StatusBarProps) {
   const { stream, isRecording, error, isLoading, startRecording, stopRecording } = useMediaRecorder({
     deviceId: selectedDevice && selectedDevice !== 'default' ? selectedDevice : undefined
@@ -57,8 +62,15 @@ export function StatusBar({
 
   const handleStartStop = async () => {
     if (isRecording) {
+      console.log('[StatusBar] Stopping recording');
       stopRecording();
     } else {
+      if (!hasActiveSession) {
+        alert('Please start a new session first using the "Start New Session" button');
+        return;
+      }
+      
+      console.log('[StatusBar] Starting recording');
       await startRecording();
     }
   };
@@ -67,32 +79,61 @@ export function StatusBar({
     <div className="space-y-2">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-slate-50 rounded-lg px-4 py-3 border border-slate-200 gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-          <Button
-            size="sm"
-            onClick={handleStartStop}
-            disabled={isLoading}
-            className={isRecording 
-              ? "bg-red-600 hover:bg-red-700 text-white shadow-md w-full sm:w-auto" 
-              : "bg-blue-600 hover:bg-blue-700 text-white shadow-md w-full sm:w-auto"
-            }
-          >
-            {isLoading ? (
-              <>
-                <Circle className="w-4 h-4 mr-2 animate-spin" />
-                Requesting...
-              </>
-            ) : isRecording ? (
-              <>
-                <MicOff className="w-4 h-4 mr-2" />
-                Stop
-              </>
-            ) : (
-              <>
-                <Mic className="w-4 h-4 mr-2" />
-                Start
-              </>
-            )}
-          </Button>
+          {/* Main Start/Stop Button - Hide when session is active and recording is stopped */}
+          {!(hasActiveSession && !isRecording) && (
+            <Button
+              size="sm"
+              onClick={handleStartStop}
+              disabled={isLoading}
+              className={isRecording 
+                ? "bg-red-600 hover:bg-red-700 text-white shadow-md w-full sm:w-auto" 
+                : "bg-blue-600 hover:bg-blue-700 text-white shadow-md w-full sm:w-auto"
+              }
+            >
+              {isLoading ? (
+                <>
+                  <Circle className="w-4 h-4 mr-2 animate-spin" />
+                  Requesting...
+                </>
+              ) : isRecording ? (
+                <>
+                  <MicOff className="w-4 h-4 mr-2" />
+                  Stop
+                </>
+              ) : (
+                <>
+                  <Mic className="w-4 h-4 mr-2" />
+                  Start
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* Session Controls - Show when session is active and recording is stopped */}
+          {hasActiveSession && !isRecording && !isLoading && (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleStartStop}
+                className="h-8"
+              >
+                <Mic className="w-3 h-3 mr-1" />
+                Continue Recording
+              </Button>
+              {onSessionEnd && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={onSessionEnd}
+                  className="h-8"
+                >
+                  <Square className="w-3 h-3 mr-1" />
+                  End Session
+                </Button>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-3 sm:gap-6">
             <div className="flex items-center gap-2">
@@ -106,6 +147,18 @@ export function StatusBar({
                 </span>
               </div>
             </div>
+
+            {/* Session Status Badge */}
+            {hasActiveSession && (
+              <div className="flex items-center gap-2">
+                <Badge 
+                  variant="default"
+                  className="bg-blue-600"
+                >
+                  🔴 Active Session
+                </Badge>
+              </div>
+            )}
 
             {isRecording && (
               <div className="flex items-center gap-2">

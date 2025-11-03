@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Mic, Volume2, Sliders, Plus, Trash2 } from 'lucide-react';
+import { X, Mic, Volume2, Sliders, Plus, Trash2, Moon, Sun } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Label } from './ui/label';
@@ -34,6 +34,9 @@ interface SettingsPanelProps {
   onMinConfidenceChange?: (value: number) => void;
   maxReferences?: number;
   onMaxReferencesChange?: (value: number) => void;
+  // Theme
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
 }
 
 export function SettingsPanel({ 
@@ -57,7 +60,9 @@ export function SettingsPanel({
   minConfidence: initialMinConfidence = 40,
   onMinConfidenceChange,
   maxReferences: initialMaxReferences = 3,
-  onMaxReferencesChange
+  onMaxReferencesChange,
+  theme = 'light',
+  onToggleTheme
 }: SettingsPanelProps) {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [primaryLanguage, setPrimaryLanguage] = useState(initialPrimaryLanguage);
@@ -214,7 +219,7 @@ export function SettingsPanel({
         <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-purple-50">
           <div className="flex items-center justify-between">
             <div>
-              <h2>C-Panel</h2>
+              <h2 className="text-xl font-semibold">Preferences</h2>
               <p className="text-sm text-slate-500 mt-1">Configure audio input and transcription options</p>
             </div>
             <Button 
@@ -479,6 +484,23 @@ export function SettingsPanel({
               <div className="flex items-center gap-2">
                 <Volume2 className="w-5 h-5 text-slate-600" />
                 <h3>Display Options</h3>
+              </div>
+
+              <div className="flex items-center justify-between py-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="theme">Theme</Label>
+                  <p className="text-xs text-slate-500">
+                    Choose between light and dark theme
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-600">{theme === 'light' ? 'Light' : 'Dark'}</span>
+                  <Switch
+                    id="theme"
+                    checked={theme === 'dark'}
+                    onCheckedChange={onToggleTheme}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between py-3">

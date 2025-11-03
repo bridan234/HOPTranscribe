@@ -2,8 +2,8 @@
  * Bible version constants
  */
 export const BIBLE_VERSIONS = {
-  DEFAULT_VERSIONS: ['NKJV', 'AMP', 'ESV', 'TPT', 'NLT', 'TLB', 'MSG', 'NIV', 'GNT'],
-  DEFAULT_VERSION: 'NKJV',
+  DEFAULT_VERSIONS: ['Best Match', 'NKJV', 'AMP', 'ESV', 'TPT', 'NLT', 'TLB', 'MSG', 'NIV', 'GNT'],
+  DEFAULT_VERSION: 'Best Match',
 } as const;
 
 /**
@@ -13,6 +13,43 @@ export const SCRIPTURE_DETECTION = {
   MIN_CONFIDENCE: 0.4,
   MAX_MATCHES: 3,
   MIN_MATCHES: 3,
+} as const;
+
+/**
+ * Language constants
+ */
+export const LANGUAGES = {
+  DEFAULT_LANGUAGES: ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Chinese', 'Japanese', 'Korean', 'Arabic', 'Hindi'],
+  DEFAULT: 'English',
+} as const;
+
+/**
+ * Audio and UI settings constants
+ */
+export const AUDIO_SETTINGS = {
+  DEFAULT_DEVICE: 'default',
+  DEFAULT_SENSITIVITY: 75, // 0-100 scale
+} as const;
+
+export const UI_SETTINGS = {
+  AUTO_SCROLL: true,
+  SHOW_CONFIDENCE: true,
+} as const;
+
+/**
+ * LocalStorage keys
+ */
+export const STORAGE_KEYS = {
+  SELECTED_DEVICE: 'hoptranscribe_selectedDevice',
+  BIBLE_VERSION: 'hoptranscribe_bibleVersion',
+  CUSTOM_VERSIONS: 'hoptranscribe_customVersions',
+  PRIMARY_LANGUAGE: 'hoptranscribe_primaryLanguage',
+  CUSTOM_LANGUAGES: 'hoptranscribe_customLanguages',
+  AUTO_SCROLL: 'hoptranscribe_autoScroll',
+  SHOW_CONFIDENCE: 'hoptranscribe_showConfidence',
+  SENSITIVITY: 'hoptranscribe_sensitivity',
+  MIN_CONFIDENCE: 'hoptranscribe_minConfidence',
+  MAX_REFERENCES: 'hoptranscribe_maxReferences',
 } as const;
 
 /**
@@ -29,7 +66,7 @@ export const SESSION_CONFIG = {
 export const getSessionInstructions = (preferredBibleVersion: string, primaryLanguage: string = 'English') => {
   const languageInstruction = primaryLanguage === 'English' 
     ? '' 
-    : `\n5. IMPORTANT: Provide the transcript field in ${primaryLanguage} language. All output text should be translated to this language.`;
+    : `\n5. IMPORTANT: Provide the transcript field in ${primaryLanguage} language. All output text should be translated to this language. Even if the detected scripture quote/reference is from an English Bible version, translate the quote to ${primaryLanguage}.`;
   
   return `You are a passive audio monitoring assistant for Bible scripture detection.
 
