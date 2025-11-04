@@ -62,9 +62,9 @@ export function SessionView({
     maxReferences,
   });
 
-  // Connect to SignalR for real-time collaboration (only for active sessions and not in read-only mode)
+  // Connect to SignalR for real-time collaboration (only for active sessions)
   useEffect(() => {
-    if (session.status === SESSION_STATUS.ACTIVE && !isReadOnly) {
+    if (session.status === SESSION_STATUS.ACTIVE) {
       signalRService.connect(session.sessionCode)
         .then(() => {
           setIsSignalRConnected(true);
@@ -78,7 +78,7 @@ export function SessionView({
         setIsSignalRConnected(false);
       };
     }
-  }, [session.sessionCode, session.status, isReadOnly]);
+  }, [session.sessionCode, session.status]);
 
   // Set up SignalR listeners for receiving real-time updates from other participants
   useEffect(() => {

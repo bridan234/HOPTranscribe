@@ -19,11 +19,6 @@ do
     if [ ! -z "$APPLICATIONINSIGHTS_CONNECTION_STRING" ]; then
       sed -i "s|__APPLICATIONINSIGHTS_CONNECTION_STRING__|$APPLICATIONINSIGHTS_CONNECTION_STRING|g" "$file"
     fi
-    
-    # Replace SignalR Hub URL placeholder
-    if [ ! -z "$VITE_SIGNALR_HUB_URL" ]; then
-      sed -i "s|__VITE_SIGNALR_HUB_URL__|$VITE_SIGNALR_HUB_URL|g" "$file"
-    fi
   fi
 done
 
