@@ -62,19 +62,6 @@ class SessionService {
     await apiService.delete(`${this.baseUrl}/${sessionId}`);
   }
 
-  // Get current active session for a user
-  async getCurrentSession(userId: string): Promise<Session | null> {
-    try {
-      const response = await apiService.get<ApiResponse<Session>>(
-        `${this.baseUrl}/current/${userId}`
-      );
-      return this.convertSessionDates(response.data);
-    } catch (error) {
-      console.error('Error fetching current session:', error);
-      return null;
-    }
-  }
-
   async getSessionHistory(params?: SessionQueryParams): Promise<SessionSummary[]> {
     const result = await this.getAllSessions(params);
     return result.items.map(session => ({

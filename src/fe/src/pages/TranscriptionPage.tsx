@@ -8,6 +8,7 @@ import { SessionView } from '../components/SessionView';
 import { Button } from '../components/ui/button';
 import { Plus, LogIn } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
+import { loggingService } from '@/services/loggingService';
 
 type AppView = 'history' | 'session';
 
@@ -36,49 +37,57 @@ export default function TranscriptionPage({
   // Load sessions on mount
   useEffect(() => {
     loadSessions();
-    
-    // Check if there's a current active session
-    const current = sessionService.getCurrentSession();
-    if (current) {
-      setActiveSession(current);
-      setCurrentView('session');
-    }
   }, []);
 
-  const loadSessions = () => {
-    const allSessions = sessionService.getAllSessions();
-    setSessions(allSessions);
+  const loadSessions = async () => {
+    try {
+      const result = await sessionService.getAllSessions({ pageSize: 100 });
+      setSessions(result.items || []);
+    } catch (error) {
+      setSessions([]);
+      toast.error('Failed to load sessions');
+      loggingService.error('Error loading sessions', 'TranscriptionPage', error as Error);
+    }
   };
 
-  const handleCreateSession = (userName: string, title: string) => {
-    const newSession = sessionService.createSession(userName, title);
-    sessionService.setCurrentSession(newSession.sessionCode);
-    setActiveSession(newSession);
-    setIsReadOnly(false);
-    setCurrentView('session');
-    setNewSessionDialogOpen(false);
-    loadSessions();
-    toast.success(`Session created! ID: ${newSession.sessionCode}`);
+  const handleCreateSession = async (userName: string, title: string) => {
+    try {
+      const newSession = await sessionService.createSession(userName, title);
+      setActiveSession(newSession);
+      setIsReadOnly(false);
+      setCurrentView('session');
+      setNewSessionDialogOpen(false);
+      await loadSessions();
+      toast.success(`Session created! ID: ${newSession.sessionCode}`);
+    } catch (error) {
+      loggingService.error('Error creating session', 'TranscriptionPage', error as Error);
+      toast.error('Failed to create session');
+    }
   };
 
-  const handleJoinSession = (sessionId: string) => {
-    const session = sessionService.getSessionById(sessionId);
-    
-    if (!session) {
-      toast.error('Session not found. Please check the session ID and try again.');
-      return;
+  const handleJoinSession = async (sessionId: string) => {
+    try {
+      const session = await sessionService.getSessionById(sessionId);
+      
+      if (!session) {
+        toast.error('Session not found. Please check the session ID and try again.');
+        return;
+      }
+      
+      if (session.status !== 'active') {
+        toast.error('This session has ended. You can only join active sessions.');
+        return;
+      }
+      
+      setActiveSession(session);
+      setIsReadOnly(true);
+      setCurrentView('session');
+      setJoinSessionDialogOpen(false);
+      toast.success(`Joined session: ${session.title}`);
+    } catch (error) {
+      loggingService.error('Error joining session', 'TranscriptionPage', error as Error);
+      toast.error('Failed to join session');
     }
-    
-    if (session.status !== 'active') {
-      toast.error('This session has ended. You can only join active sessions.');
-      return;
-    }
-    
-    setActiveSession(session);
-    setIsReadOnly(true);
-    setCurrentView('session');
-    setJoinSessionDialogOpen(false);
-    toast.success(`Joined session: ${session.title}`);
   };
 
   const handleOpenSession = (session: Session) => {
@@ -90,17 +99,26 @@ export default function TranscriptionPage({
     setCurrentView('session');
   };
 
-  const handleUpdateSession = (updatedSession: Session) => {
-    sessionService.updateSession(updatedSession);
-    setActiveSession(updatedSession);
-    loadSessions();
+  const handleUpdateSession = async (updatedSession: Session) => {
+    try {
+      await sessionService.updateSession(updatedSession.sessionCode, {
+        title: updatedSession.title,
+        status: updatedSession.status,
+        isRecording: updatedSession.isRecording,
+        isPaused: updatedSession.isPaused
+      });
+      setActiveSession(updatedSession);
+      await loadSessions();
+    } catch (error) {
+      loggingService.error('Error updating session', 'TranscriptionPage', error as Error);
+      toast.error('Failed to update session');
+    }
   };
 
   const handleBackToHistory = () => {
     setCurrentView('history');
     setActiveSession(null);
     setIsReadOnly(false);
-    sessionService.setCurrentSession(null);
     loadSessions();
   };
 

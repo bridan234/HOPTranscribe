@@ -90,7 +90,7 @@ export function SessionView({
 
       const updatedSession = {
         ...session,
-        transcripts: [...session.transcripts, segment]
+        transcripts: [...(session.transcripts || []), segment]
       };
       onUpdateSession(updatedSession);
     };
@@ -98,7 +98,7 @@ export function SessionView({
     const handleReceiveScripture = (reference: ScriptureReference) => {
       const updatedSession = {
         ...session,
-        scriptureReferences: [...session.scriptureReferences, reference]
+        scriptureReferences: [...(session.scriptureReferences || []), reference]
       };
       onUpdateSession(updatedSession);
     };
@@ -156,7 +156,7 @@ export function SessionView({
 
       const updatedSession = {
         ...session,
-        transcripts: [...session.transcripts, newSegment],
+        transcripts: [...(session.transcripts || []), newSegment],
         scriptureReferences: [...session.scriptureReferences, ...newReferences]
       };
       
@@ -261,29 +261,38 @@ export function SessionView({
   };
 
   const formatDate = (date: Date) => {
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) {
+      return 'Invalid date';
+    }
     return new Intl.DateTimeFormat('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    }).format(new Date(date));
+    }).format(dateObj);
   };
 
   // Convert to format expected by existing components (reversed for newest first)
-  const transcriptionSegments = [...session.transcripts].reverse().map(t => ({
-    id: t.id,
-    text: t.text,
-    timestamp: new Intl.DateTimeFormat('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    }).format(new Date(t.timestamp))
-  }));
+  const transcriptionSegments = [...(session.transcripts || [])].reverse().map(t => {
+    const timestamp = new Date(t.timestamp);
+    return {
+      id: t.id,
+      text: t.text,
+      timestamp: isNaN(timestamp.getTime())
+        ? 'Invalid time'
+        : new Intl.DateTimeFormat('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          }).format(timestamp)
+    };
+  });
 
   // Group scripture references by transcript segment
-  const segmentRefs = session.transcripts.map(transcript => {
-    const refsForSegment = session.scriptureReferences
+  const segmentRefs = (session.transcripts || []).map(transcript => {
+    const refsForSegment = (session.scriptureReferences || [])
       .filter(ref => ref.transcriptSegmentId === transcript.id)
       .map(ref => ({
         id: ref.id,
@@ -295,11 +304,16 @@ export function SessionView({
 
     return {
       segmentId: transcript.id,
-      timestamp: new Intl.DateTimeFormat('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      }).format(new Date(transcript.timestamp)),
+      timestamp: (() => {
+        const ts = new Date(transcript.timestamp);
+        return isNaN(ts.getTime())
+          ? 'Invalid time'
+          : new Intl.DateTimeFormat('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit'
+            }).format(ts);
+      })(),
       references: refsForSegment
     };
   }).filter(seg => seg.references.length > 0); // Only include segments with references
