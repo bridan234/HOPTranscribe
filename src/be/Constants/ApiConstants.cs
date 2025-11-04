@@ -22,11 +22,19 @@ public static class ApiConstants
         public const string ApiPrefix = "api";
         public const string OpenAIPrefix = "openai";
         public const string LoggingPrefix = "logging";
+        public const string SessionsPrefix = "sessions";
         public const string SessionEndpoint = "session";
         public const string SanitizeJsonEndpoint = "sanitize-json";
         public const string HealthEndpoint = "health";
         public const string LogEndpoint = "log";
         public const string BatchLogEndpoint = "batch";
+    }
+
+    public static class SessionStorage
+    {
+        public const int DefaultExpirationDays = 8;
+        public const int CleanupIntervalMinutes = 60;
+        public const string ExpirationDaysConfigKey = "SessionStorage:ExpirationDays";
     }
 
     public static class ErrorMessages

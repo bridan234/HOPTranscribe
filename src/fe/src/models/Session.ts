@@ -48,7 +48,7 @@ export interface Checkpoint {
   };
 }
 
-export type SessionStatus = 'active' | 'completed' | 'error';
+export type SessionStatus = 'active' | 'completed' | 'ended' | 'error';
 
 export interface Session {
   id: string;
@@ -59,38 +59,38 @@ export interface Session {
   endedAt?: Date;
   updatedAt: Date;
   status: SessionStatus;
-  isReadonly: boolean;
+  isReadonly?: boolean;
   isRecording?: boolean;
   isPaused?: boolean;
   
   // Duration tracking
-  duration: number; // Total seconds
-  activeDuration: number;
+  duration?: number; // Total seconds
+  activeDuration?: number;
   
   // Content tracking
-  transcripts: TranscriptSegment[];
-  scriptureReferences: ScriptureReference[];
-  scriptureCount: number;
-  scriptures: Array<{
+  transcripts?: TranscriptSegment[];
+  scriptureReferences?: ScriptureReference[];
+  scriptureCount?: number;
+  scriptures?: Array<{
     book: string;
     chapter: number;
     verse: number;
     reference: string;
     timestamp: number;
   }>;
-  transcript: string;
+  transcript?: string;
   
-  // Metadata
-  metadata: SessionMetadata;
+  // Metadata (optional)
+  metadata?: SessionMetadata;
   
-  // Error recovery
-  checkpoints: Checkpoint[];
+  // Error recovery (optional)
+  checkpoints?: Checkpoint[];
   lastCheckpointAt?: Date;
-  hasError: boolean;
+  hasError?: boolean;
   errorMessage?: string;
   
-  // Settings snapshot (for recovery)
-  settingsSnapshot: {
+  // Settings snapshot (for recovery) (optional)
+  settingsSnapshot?: {
     selectedModel: string;
     apiKey: string;
   };
@@ -99,10 +99,10 @@ export interface Session {
 export interface SessionSummary {
   id: string;
   sessionCode: string;
+  userName: string;
+  title: string;
   startedAt: Date;
   duration: number;
   scriptureCount: number;
   status: SessionStatus;
-  title: string;
-  username: string;
 }

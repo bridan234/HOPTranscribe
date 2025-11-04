@@ -13,7 +13,13 @@ export const API_CONSTANTS = {
       SANITIZE_JSON: '/api/openai/sanitize-json',
       LOG: '/api/logging/log',
       BATCH_LOG: '/api/logging/batch',
+      SESSIONS: '/api/sessions',
     },
+  },
+
+  SESSION: {
+    DEFAULT_PAGE_SIZE: 20,
+    MAX_PAGE_SIZE: 100,
   },
 
   // OpenAI Realtime API

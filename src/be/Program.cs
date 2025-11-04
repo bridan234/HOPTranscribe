@@ -67,12 +67,15 @@ try
 
     builder.Services.AddSignalR();
 
+    builder.Services.AddMemoryCache();
+
     builder.Services.AddHttpClient<IOpenAIService, OpenAIService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(30);
     });
 
     builder.Services.AddScoped<IClientLoggingService, ClientLoggingService>();
+    builder.Services.AddSingleton<ISessionService, InMemorySessionService>();
 
     builder.Services.AddOpenApi();
     builder.Services.AddHealthChecks();

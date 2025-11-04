@@ -1,168 +1,150 @@
-import { Session, SessionSummary } from '../models/Session';
-
-// Generate a random 4-character alphanumeric string
-function generateSessionCode(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let code = '';
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
-// Generate full session ID: code-username
-function generateSessionId(userName: string): string {
-  const code = generateSessionCode();
-  const sanitizedUsername = userName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return `${code}-${sanitizedUsername}`;
-}
-
-// LocalStorage keys
-const SESSIONS_KEY = 'hoptranscribe_sessions';
-const CURRENT_SESSION_KEY = 'hoptranscribe_current_session';
+import { Session, SessionSummary, TranscriptSegment, ScriptureReference } from '../models/Session';
+import { ApiResponse, PaginatedResult, SessionQueryParams } from '../models/ApiTypes';
+import { apiService } from './apiService';
+import { API_CONSTANTS } from '../constants/apiConstants';
 
 class SessionService {
-  // Get all sessions from localStorage
-  getAllSessions(): Session[] {
-    const sessionsJson = localStorage.getItem(SESSIONS_KEY);
-    if (!sessionsJson) return [];
-    
-    const sessions = JSON.parse(sessionsJson);
-    // Convert date strings back to Date objects
-    return sessions.map((session: any) => ({
-      ...session,
-      startedAt: new Date(session.startedAt),
-      transcripts: (session.transcripts || []).map((t: any) => ({
-        ...t,
-        timestamp: new Date(t.timestamp)
-      })),
-      scriptureReferences: session.scriptureReferences || []
-    }));
+  private readonly baseUrl = API_CONSTANTS.BACKEND.ENDPOINTS.SESSIONS;
+
+  // Get all sessions with pagination and filtering
+  async getAllSessions(params?: SessionQueryParams): Promise<PaginatedResult<Session>> {
+    const queryString = params ? '?' + new URLSearchParams(params as any).toString() : '';
+    const response = await apiService.get<ApiResponse<PaginatedResult<Session>>>(
+      `${this.baseUrl}${queryString}`
+    );
+    return response.data;
   }
 
-  // Save all sessions to localStorage
-  private saveAllSessions(sessions: Session[]): void {
-    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
-  }
-
-  // Get a specific session by ID
-  getSessionById(sessionId: string): Session | null {
-    const sessions = this.getAllSessions();
-    return sessions.find(s => s.sessionCode === sessionId) || null;
+  async getSessionById(sessionCode: string): Promise<Session | null> {
+    try {
+      const response = await apiService.get<ApiResponse<Session>>(
+        `${this.baseUrl}/${sessionCode}`
+      );
+      return this.convertSessionDates(response.data);
+    } catch (error) {
+      console.error('Error fetching session:', error);
+      return null;
+    }
   }
 
   // Create a new session
-  createSession(userName: string, title: string): Session {
-    const sessionCode = generateSessionId(userName);
-    const newSession: Session = {
-      id: `session-${Date.now()}`,
-      sessionCode,
-      userName,
-      title,
-      startedAt: new Date(),
-      status: 'active',
-      isRecording: false,
-      isPaused: false,
-      transcripts: [],
-      scriptureReferences: []
-    };
-    
-    const sessions = this.getAllSessions();
-    sessions.push(newSession);
-    this.saveAllSessions(sessions);
-    
-    return newSession;
+  async createSession(userName: string, title: string): Promise<Session> {
+    const response = await apiService.post<ApiResponse<Session>>(
+      this.baseUrl,
+      { userName, title }
+    );
+    return this.convertSessionDates(response.data);
   }
 
-  // Update a session
-  updateSession(updatedSession: Session): void {
-    const sessions = this.getAllSessions();
-    const index = sessions.findIndex(s => s.id === updatedSession.id);
-    if (index !== -1) {
-      sessions[index] = updatedSession;
-      this.saveAllSessions(sessions);
-      
-      // Update current session if it's the active one
-      const currentSessionId = this.getCurrentSessionId();
-      if (currentSessionId === updatedSession.sessionCode) {
-        this.setCurrentSession(updatedSession.sessionCode);
-      }
-    }
-  }
-
-  // Get current active session
-  getCurrentSession(): Session | null {
-    const sessionId = localStorage.getItem(CURRENT_SESSION_KEY);
-    if (!sessionId) return null;
-    return this.getSessionById(sessionId);
-  }
-
-  // Get current session ID
-  private getCurrentSessionId(): string | null {
-    return localStorage.getItem(CURRENT_SESSION_KEY);
-  }
-
-  // Set current active session
-  setCurrentSession(sessionCode: string | null): void {
-    if (sessionCode) {
-      localStorage.setItem(CURRENT_SESSION_KEY, sessionCode);
-    } else {
-      localStorage.removeItem(CURRENT_SESSION_KEY);
-    }
-  }
-
-  // Get session history
-  getSessionHistory(): SessionSummary[] {
-    const sessions = this.getAllSessions();
-    return sessions
-      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
-      .map(session => ({
-        id: session.id,
-        sessionCode: session.sessionCode,
-        userName: session.userName,
-        title: session.title,
-        startedAt: session.startedAt,
-        status: session.status,
-        duration: this.calculateDuration(session),
-        scriptureCount: session.scriptureReferences.length
-      }));
-  }
-
-  // Calculate session duration
-  private calculateDuration(session: Session): number {
-    if (session.transcripts.length === 0) return 0;
-    
-    const firstTimestamp = session.transcripts[0].timestamp.getTime();
-    const lastTimestamp = session.transcripts[session.transcripts.length - 1].timestamp.getTime();
-    
-    return Math.floor((lastTimestamp - firstTimestamp) / 1000);
-  }
-
-  // Delete a session
-  deleteSession(sessionId: string): void {
-    const sessions = this.getAllSessions();
-    const filteredSessions = sessions.filter(s => s.id !== sessionId);
-    this.saveAllSessions(filteredSessions);
-    
-    // Clear current session if it was deleted
-    const current = this.getCurrentSessionId();
-    const deletedSession = sessions.find(s => s.id === sessionId);
-    if (current === deletedSession?.sessionCode) {
-      this.setCurrentSession(null);
-    }
+  async updateSession(sessionCode: string, updates: {
+    title?: string;
+    status?: string;
+    isRecording?: boolean;
+    isPaused?: boolean;
+  }): Promise<Session> {
+    const response = await apiService.put<ApiResponse<Session>>(
+      `${this.baseUrl}/${sessionCode}`,
+      updates
+    );
+    return this.convertSessionDates(response.data);
   }
 
   // End a session
-  endSession(session: Session): Session {
-    const updatedSession = {
+  async endSession(sessionCode: string): Promise<Session> {
+    const response = await apiService.patch<ApiResponse<Session>>(
+      `${this.baseUrl}/${sessionCode}/end`
+    );
+    return this.convertSessionDates(response.data);
+  }
+
+  // Delete a session
+  async deleteSession(sessionId: string): Promise<void> {
+    await apiService.delete(`${this.baseUrl}/${sessionId}`);
+  }
+
+  // Get current active session for a user
+  async getCurrentSession(userId: string): Promise<Session | null> {
+    try {
+      const response = await apiService.get<ApiResponse<Session>>(
+        `${this.baseUrl}/current/${userId}`
+      );
+      return this.convertSessionDates(response.data);
+    } catch (error) {
+      console.error('Error fetching current session:', error);
+      return null;
+    }
+  }
+
+  async getSessionHistory(params?: SessionQueryParams): Promise<SessionSummary[]> {
+    const result = await this.getAllSessions(params);
+    return result.items.map(session => ({
+      id: session.id,
+      sessionCode: session.sessionCode,
+      userName: session.userName,
+      title: session.title,
+      startedAt: session.startedAt,
+      status: session.status,
+      duration: session.duration || 0,
+      scriptureCount: session.scriptureReferences?.length || 0
+    }));
+  }
+
+  async addTranscript(sessionCode: string, text: string, confidence: number): Promise<TranscriptSegment> {
+    const response = await apiService.post<ApiResponse<TranscriptSegment>>(
+      `${this.baseUrl}/${sessionCode}/transcripts`,
+      { text, confidence }
+    );
+    return this.convertTranscriptDates(response.data);
+  }
+
+  async getTranscripts(sessionCode: string): Promise<TranscriptSegment[]> {
+    const response = await apiService.get<ApiResponse<TranscriptSegment[]>>(
+      `${this.baseUrl}/${sessionCode}/transcripts`
+    );
+    return response.data.map(t => this.convertTranscriptDates(t));
+  }
+
+  // Add scripture reference to session
+  async addScripture(sessionCode: string, scripture: {
+    book: string;
+    chapter: number;
+    verse: number;
+    version: string;
+    text: string;
+    confidence: number;
+    transcriptSegmentId: string;
+  }): Promise<ScriptureReference> {
+    const response = await apiService.post<ApiResponse<ScriptureReference>>(
+      `${this.baseUrl}/${sessionCode}/scriptures`,
+      scripture
+    );
+    return response.data;
+  }
+
+  // Get all scripture references for a session
+  async getScriptures(sessionCode: string): Promise<ScriptureReference[]> {
+    const response = await apiService.get<ApiResponse<ScriptureReference[]>>(
+      `${this.baseUrl}/${sessionCode}/scriptures`
+    );
+    return response.data;
+  }
+
+  private convertSessionDates(session: Session): Session {
+    return {
       ...session,
-      status: 'ended' as const,
-      isRecording: false,
-      isPaused: false
+      startedAt: new Date(session.startedAt),
+      endedAt: session.endedAt ? new Date(session.endedAt) : undefined,
+      updatedAt: new Date(session.updatedAt),
+      transcripts: (session.transcripts || []).map(t => this.convertTranscriptDates(t)),
+      scriptureReferences: session.scriptureReferences || []
     };
-    this.updateSession(updatedSession);
-    this.setCurrentSession(null);
-    return updatedSession;
+  }
+
+  private convertTranscriptDates(transcript: TranscriptSegment): TranscriptSegment {
+    return {
+      ...transcript,
+      timestamp: new Date(transcript.timestamp)
+    };
   }
 }
 
