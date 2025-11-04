@@ -1,17 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Session, TranscriptSegment, ScriptureReference } from '../models/Session';
 import { RecordingControls } from './RecordingControls';
 import { ScriptureReferences } from './ScriptureReferences';
 import { TranscriptionPanel } from './TranscriptionPanel';
 import { Button } from './ui/button';
-import { ArrowLeft, Copy } from 'lucide-react';
+import { ArrowLeft, Copy, Users } from 'lucide-react';
 import { Card } from './ui/card';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from './ui/resizable';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { copyToClipboard } from '../utils/clipboard';
 import { useMediaRecorder } from '../hooks/useMediaRecorder';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
+import { signalRService } from '../services/signalRService';
+import { SIGNALR_STATES } from '../constants/signalRConstants';
+import { SESSION_STATUS, SESSION_MESSAGES, CONNECTION_STATUS_DISPLAY } from '../constants/sessionConstants';
+import { CONNECTION_STATES } from '../constants/openaiConstants';
 
 interface SessionViewProps {
   session: Session;
@@ -40,6 +45,9 @@ export function SessionView({
   const [showEndConfirmation, setShowEndConfirmation] = useState(false);
   const [shouldConnect, setShouldConnect] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
+  const [collaboratorCount, setCollaboratorCount] = useState(0);
+  const [isSignalRConnected, setIsSignalRConnected] = useState(false);
+  const lastBroadcastSegmentId = useRef<string | null>(null);
   
   // Media recording hook
   const { stream, isRecording: mediaIsRecording, error: mediaError, startRecording: startMedia, stopRecording: stopMedia } = useMediaRecorder({ deviceId: selectedDevice !== 'default' ? selectedDevice : undefined });
@@ -54,13 +62,72 @@ export function SessionView({
     maxReferences,
   });
 
+  // Connect to SignalR for real-time collaboration (only for active sessions and not in read-only mode)
   useEffect(() => {
-    if (shouldConnect && stream && connectionState === 'disconnected') {
+    if (session.status === SESSION_STATUS.ACTIVE && !isReadOnly) {
+      signalRService.connect(session.sessionCode)
+        .then(() => {
+          setIsSignalRConnected(true);
+        })
+        .catch((err) => {
+          console.error('SignalR connection failed:', err);
+        });
+
+      return () => {
+        signalRService.disconnect();
+        setIsSignalRConnected(false);
+      };
+    }
+  }, [session.sessionCode, session.status, isReadOnly]);
+
+  // Set up SignalR listeners for receiving real-time updates from other participants
+  useEffect(() => {
+    if (!isSignalRConnected) return;
+
+    const handleReceiveTranscript = (segment: TranscriptSegment) => {
+      // Only update if this is from another participant (not our own broadcast)
+      if (segment.id === lastBroadcastSegmentId.current) return;
+
+      const updatedSession = {
+        ...session,
+        transcripts: [...session.transcripts, segment]
+      };
+      onUpdateSession(updatedSession);
+    };
+
+    const handleReceiveScripture = (reference: ScriptureReference) => {
+      const updatedSession = {
+        ...session,
+        scriptureReferences: [...session.scriptureReferences, reference]
+      };
+      onUpdateSession(updatedSession);
+    };
+
+    const handleUserJoined = (data: { connectionId: string; timestamp: string }) => {
+      setCollaboratorCount(prev => prev + 1);
+      toast.info(SESSION_MESSAGES.PARTICIPANT_JOINED);
+    };
+
+    const handleUserLeft = (data: { connectionId: string; timestamp: string }) => {
+      setCollaboratorCount(prev => Math.max(0, prev - 1));
+      toast.info(SESSION_MESSAGES.PARTICIPANT_LEFT);
+    };
+
+    signalRService.onReceiveTranscript(handleReceiveTranscript);
+    signalRService.onReceiveScripture(handleReceiveScripture);
+    signalRService.onUserJoined(handleUserJoined);
+    signalRService.onUserLeft(handleUserLeft);
+
+    // Note: SignalR doesn't have a removeListener API, cleanup handled on disconnect
+  }, [isSignalRConnected, session, onUpdateSession]);
+
+  useEffect(() => {
+    if (shouldConnect && stream && connectionState === CONNECTION_STATES.DISCONNECTED) {
       connect().then(() => {
         setShouldConnect(false);
         setHasConnected(true);
       }).catch((err) => {
-        toast.error(`Failed to connect: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        toast.error(`${SESSION_MESSAGES.CONNECT_FAILED}: ${err instanceof Error ? err.message : 'Unknown error'}`);
         setShouldConnect(false);
       });
     }
@@ -94,16 +161,26 @@ export function SessionView({
       };
       
       onUpdateSession(updatedSession);
+
+      if (isSignalRConnected && !isReadOnly) {
+        lastBroadcastSegmentId.current = newSegment.id;
+        
+        signalRService.broadcastTranscript(session.sessionCode, newSegment);
+        
+        newReferences.forEach(ref => {
+          signalRService.broadcastScripture(session.sessionCode, ref);
+        });
+      }
     }
-  }, [lastResult]);
+  }, [lastResult, isSignalRConnected, isReadOnly, session.sessionCode]);
 
   // Handle errors
   useEffect(() => {
     if (mediaError) {
-      toast.error(`Media error: ${mediaError}`);
+      toast.error(`${SESSION_MESSAGES.MEDIA_ERROR}: ${mediaError}`);
     }
     if (wsError) {
-      toast.error(`Connection error: ${wsError}`);
+      toast.error(`${SESSION_MESSAGES.CONNECTION_ERROR}: ${wsError}`);
     }
   }, [mediaError, wsError]);
 
@@ -118,9 +195,9 @@ export function SessionView({
         isPaused: false
       };
       onUpdateSession(updatedSession);
-      toast.success('Recording started');
+      toast.success(SESSION_MESSAGES.RECORDING_STARTED);
     } catch (err) {
-      toast.error(`Failed to start recording: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error(`${SESSION_MESSAGES.START_FAILED}: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -132,7 +209,7 @@ export function SessionView({
       isRecording: false,
       isPaused: true
     });
-    toast.info('Recording paused');
+    toast.info(SESSION_MESSAGES.RECORDING_PAUSED);
   };
 
   const handleResumeRecording = async () => {
@@ -150,9 +227,9 @@ export function SessionView({
         isPaused: false
       };
       onUpdateSession(updatedSession);
-      toast.success('Recording resumed');
+      toast.success(SESSION_MESSAGES.RECORDING_RESUMED);
     } catch (err) {
-      toast.error(`Failed to resume recording: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error(`${SESSION_MESSAGES.RESUME_FAILED}: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -166,20 +243,20 @@ export function SessionView({
     
     onUpdateSession({
       ...session,
-      status: 'ended',
+      status: SESSION_STATUS.ENDED,
       isRecording: false,
       isPaused: false
     });
     setShowEndConfirmation(false);
-    toast.success('Session ended successfully');
+    toast.success(SESSION_MESSAGES.SESSION_ENDED);
   };
 
   const handleCopySessionId = async () => {
     const success = await copyToClipboard(session.sessionCode);
     if (success) {
-      toast.success('Session ID copied to clipboard');
+      toast.success(SESSION_MESSAGES.SESSION_ID_COPIED);
     } else {
-      toast.error('Failed to copy to clipboard');
+      toast.error(SESSION_MESSAGES.COPY_FAILED);
     }
   };
 
@@ -256,21 +333,27 @@ export function SessionView({
               </button>
               <span className="hidden sm:inline">•</span>
               <span className={`flex items-center gap-1 ${
-                connectionState === 'connected' ? 'text-green-600' :
-                connectionState === 'connecting' ? 'text-yellow-600' :
-                connectionState === 'failed' ? 'text-red-600' :
-                connectionState === 'disconnected' && hasConnected ? 'text-orange-600' :
-                'text-gray-500'
+                connectionState === CONNECTION_STATES.CONNECTED ? CONNECTION_STATUS_DISPLAY.CONNECTED.COLOR :
+                connectionState === CONNECTION_STATES.CONNECTING ? CONNECTION_STATUS_DISPLAY.CONNECTING.COLOR :
+                connectionState === CONNECTION_STATES.FAILED ? CONNECTION_STATUS_DISPLAY.FAILED.COLOR :
+                connectionState === CONNECTION_STATES.DISCONNECTED && hasConnected ? CONNECTION_STATUS_DISPLAY.DISCONNECTED.COLOR :
+                CONNECTION_STATUS_DISPLAY.NOT_CONNECTED.COLOR
               }`}>
                 <span className={`w-2 h-2 rounded-full ${
-                  connectionState === 'connected' || connectionState === 'connecting' ? 'animate-pulse' : ''
+                  connectionState === CONNECTION_STATES.CONNECTED || connectionState === CONNECTION_STATES.CONNECTING ? 'animate-pulse' : ''
                 } bg-current`} />
-                {connectionState === 'connected' ? 'Connected' :
-                 connectionState === 'connecting' ? 'Connecting' :
-                 connectionState === 'failed' ? 'Failed' :
-                 connectionState === 'disconnected' && hasConnected ? 'Disconnected' :
-                 'Not Connected'}
+                {connectionState === CONNECTION_STATES.CONNECTED ? CONNECTION_STATUS_DISPLAY.CONNECTED.LABEL :
+                 connectionState === CONNECTION_STATES.CONNECTING ? CONNECTION_STATUS_DISPLAY.CONNECTING.LABEL :
+                 connectionState === CONNECTION_STATES.FAILED ? CONNECTION_STATUS_DISPLAY.FAILED.LABEL :
+                 connectionState === CONNECTION_STATES.DISCONNECTED && hasConnected ? CONNECTION_STATUS_DISPLAY.DISCONNECTED.LABEL :
+                 CONNECTION_STATUS_DISPLAY.NOT_CONNECTED.LABEL}
               </span>
+              {isSignalRConnected && session.status === SIGNALR_STATES.ACTIVE && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  {collaboratorCount + 1}
+                </Badge>
+              )}
             </div>
           </div>
 
@@ -281,7 +364,7 @@ export function SessionView({
             onPauseRecording={handlePauseRecording}
             onResumeRecording={handleResumeRecording}
             onEndSession={handleEndSessionClick}
-            isReadOnly={isReadOnly}
+            isReadOnly={isReadOnly || session.status === SESSION_STATUS.ENDED}
           />
         </div>
       </div>

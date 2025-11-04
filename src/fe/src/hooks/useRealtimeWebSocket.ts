@@ -84,9 +84,8 @@ export function useRealtimeWebSocket({
       case OPENAI_EVENT_TYPES.INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
         if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
           const now = Date.now();
-          
-          if (!isResponseInProgress.current && (now - lastResponseRequestTime.current) > 500) {
-            isResponseInProgress.current = true;
+
+          if (!isResponseInProgress.current) {
             lastResponseRequestTime.current = now;
             websocketService.sendEvent(websocketRef.current, {
               type: OPENAI_CLIENT_EVENTS.RESPONSE_CREATE
@@ -282,12 +281,7 @@ export function useRealtimeWebSocket({
         break;
 
       case OPENAI_EVENT_TYPES.ERROR:
-        const errorMessage = event.error?.message || '';
-        
-        if (!errorMessage.includes('already has an active response in progress')) {
-          isResponseInProgress.current = false;
-        }
-        loggingService.error('OpenAI error', 'WebSocket', new Error(errorMessage || JSON.stringify(event)));
+        isResponseInProgress.current = false;
         break;
     }
   }, [preferredBibleVersion, primaryLanguage, maxReferences, minConfidence]);

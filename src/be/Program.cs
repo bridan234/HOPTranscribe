@@ -1,5 +1,6 @@
 using HOPTranscribe.Configuration;
 using HOPTranscribe.Constants;
+using HOPTranscribe.Hubs;
 using HOPTranscribe.Middleware;
 using HOPTranscribe.Models;
 using HOPTranscribe.Services;
@@ -35,7 +36,6 @@ try
     var allowedOrigins = builder.Configuration
         .GetSection("AllowedOrigins")
         .Get<string[]>() ?? Array.Empty<string>();
-
     builder.Services.AddCors(options =>
     {
         options.AddPolicy(ApiConstants.PolicyNames.CorsPolicy, policy =>
@@ -56,13 +56,16 @@ try
             }
             else
             {
-                // Development: allow any origin
-                policy.AllowAnyOrigin()
+                // Development: allow specific origin with credentials for SignalR
+                policy.WithOrigins("http://localhost:5173", "http://localhost:5174", "http://localhost:3000")
                       .AllowAnyMethod()
-                      .AllowAnyHeader();
+                      .AllowAnyHeader()
+                      .AllowCredentials();
             }
         });
     });
+
+    builder.Services.AddSignalR();
 
     builder.Services.AddHttpClient<IOpenAIService, OpenAIService>(client =>
     {
@@ -88,6 +91,7 @@ try
     app.UseCors(ApiConstants.PolicyNames.CorsPolicy);
     app.UseHttpsRedirection();
     app.MapControllers();
+    app.MapHub<SessionHub>("/sessionHub");
 
     app.MapHealthChecks($"/{ApiConstants.Routes.HealthEndpoint}");
     app.MapGet($"/{ApiConstants.Routes.HealthEndpoint}/status", (IOptions<ApplicationSettings> appSettings) =>

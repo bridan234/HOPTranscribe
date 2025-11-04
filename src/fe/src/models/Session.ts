@@ -3,6 +3,24 @@
  * Inspired by Glass's session management architecture
  */
 
+export interface TranscriptSegment {
+  id: string;
+  text: string;
+  timestamp: Date;
+  confidence: number;
+}
+
+export interface ScriptureReference {
+  id: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  version: string;
+  text: string;
+  confidence: number;
+  transcriptSegmentId: string;
+}
+
 export interface SessionMetadata {
   title: string;
   username: string;
@@ -35,24 +53,30 @@ export type SessionStatus = 'active' | 'completed' | 'error';
 export interface Session {
   id: string;
   sessionCode: string; // Format: "a23h-username" (4-digit alphanumeric + username)
+  userName: string;
+  title: string;
   startedAt: Date;
   endedAt?: Date;
   updatedAt: Date;
   status: SessionStatus;
-  isReadonly: boolean; // True for completed/historical sessions
+  isReadonly: boolean;
+  isRecording?: boolean;
+  isPaused?: boolean;
   
   // Duration tracking
   duration: number; // Total seconds
-  activeDuration: number; // Seconds actually recording (excluding pauses)
+  activeDuration: number;
   
   // Content tracking
+  transcripts: TranscriptSegment[];
+  scriptureReferences: ScriptureReference[];
   scriptureCount: number;
   scriptures: Array<{
     book: string;
     chapter: number;
     verse: number;
     reference: string;
-    timestamp: number; // Relative to session start
+    timestamp: number;
   }>;
   transcript: string;
   
