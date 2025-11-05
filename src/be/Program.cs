@@ -69,7 +69,12 @@ try
         });
     });
 
-    builder.Services.AddSignalR();
+    builder.Services.AddSignalR(options =>
+    {
+        options.EnableDetailedErrors = !builder.Environment.IsProduction();
+        options.KeepAliveInterval = TimeSpan.FromSeconds(50);
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(120);
+    });
 
     builder.Services.AddMemoryCache();
 
