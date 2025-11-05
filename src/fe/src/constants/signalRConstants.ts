@@ -7,8 +7,11 @@ export const SIGNALR_CONFIG = {
   // Hub URL
   HUB_URL: 'http://localhost:5138/sessionHub',
   
-  PRODUCTION_HUB_URL: import.meta.env.VITE_SIGNALR_HUB_URL || '__VITE_SIGNALR_HUB_URL__' || 
-    (import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/sessionHub` : 'http://localhost:5138/sessionHub'),
+  PRODUCTION_HUB_URL: '__VITE_SIGNALR_HUB_URL__'.startsWith('__VITE')
+    ? ('__VITE_API_BASE_URL__'.startsWith('__VITE') 
+        ? 'http://localhost:5138/sessionHub'
+        : '__VITE_API_BASE_URL__/sessionHub')
+    : '__VITE_SIGNALR_HUB_URL__',
   
   // Connection configuration
   CONNECTION: {
