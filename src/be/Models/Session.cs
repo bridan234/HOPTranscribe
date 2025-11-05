@@ -55,6 +55,7 @@ public class SessionMetadata
 
 public enum SessionStatus
 {
+    New,
     Active,
     Completed,
     Ended,

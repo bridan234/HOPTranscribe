@@ -46,7 +46,7 @@ public class InMemorySessionService : ISessionService
             Title = request.Title,
             StartedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-            Status = SessionStatus.Active,
+            Status = SessionStatus.New,
             IsReadonly = false,
             IsRecording = false,
             IsPaused = false,

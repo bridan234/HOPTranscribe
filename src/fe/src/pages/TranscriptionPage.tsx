@@ -52,6 +52,7 @@ export default function TranscriptionPage({
 
   const handleCreateSession = async (userName: string, title: string) => {
     try {
+      localStorage.setItem('hoptranscribe_username', userName);
       const newSession = await sessionService.createSession(userName, title);
       setActiveSession(newSession);
       setIsReadOnly(false);
@@ -100,7 +101,10 @@ export default function TranscriptionPage({
       }
       
       setActiveSession(fullSession);
-      setIsReadOnly(fullSession.status === SESSION_STATUS.ENDED);
+      const currentUser = localStorage.getItem('hoptranscribe_username') || '';
+      const isOwner = fullSession.userName === currentUser;
+      const isEndedSession = fullSession.status === SESSION_STATUS.ENDED;
+      setIsReadOnly(isEndedSession || !isOwner);
       
       setCurrentView('session');
     } catch (error) {

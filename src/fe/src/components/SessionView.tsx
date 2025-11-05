@@ -70,7 +70,7 @@ export function SessionView({
   });
 
   useEffect(() => {
-    if (session.status === SESSION_STATUS.ACTIVE) {
+    if (session.status === SESSION_STATUS.ACTIVE || session.status === SESSION_STATUS.NEW) {
       signalRService.connect(session.sessionCode)
         .then(() => {
           setIsSignalRConnected(true);
@@ -227,6 +227,7 @@ export function SessionView({
       
       const updatedSession = {
         ...session,
+        status: session.status === SESSION_STATUS.NEW ? SESSION_STATUS.ACTIVE : session.status,
         isRecording: true,
         isPaused: false
       };
@@ -373,14 +374,24 @@ export function SessionView({
                 className={`px-2 py-0.5 rounded text-xs ${
                   session.status === SESSION_STATUS.ENDED
                     ? 'bg-gray-100 text-gray-800' 
+                    : session.status === SESSION_STATUS.NEW
+                    ? 'bg-blue-100 text-blue-800'
                     : 'bg-green-100 text-green-800'
                 }`}
               >
-                {session.status === SESSION_STATUS.ENDED ? 'Ended' : 'Active'}
+                {session.status === SESSION_STATUS.ENDED ? 'Ended' : session.status === SESSION_STATUS.NEW ? 'New' : 'Active'}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
               <span className="truncate">Created by {session.userName}</span>
+              {isReadOnly && session.status !== SESSION_STATUS.ENDED && (
+                <>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">
+                    View Only
+                  </span>
+                </>
+              )}
               <span className="hidden sm:inline">•</span>
               <span className="hidden sm:inline">{formatDate(session.startedAt)}</span>
               <span className="hidden sm:inline">•</span>

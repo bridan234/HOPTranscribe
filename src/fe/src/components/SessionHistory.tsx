@@ -101,11 +101,13 @@ export function SessionHistory({ sessions, onOpenSession }: SessionHistoryProps)
                     <span 
                       className={`px-2 py-0.5 rounded text-xs ${
                         session.status === SESSION_STATUS.ACTIVE
-                          ? 'bg-green-100 text-green-800' 
+                          ? 'bg-green-100 text-green-800'
+                          : session.status === SESSION_STATUS.NEW
+                          ? 'bg-blue-100 text-blue-800' 
                           : 'bg-gray-100 text-gray-800'
                       }`}
                     >
-                      {session.status === SESSION_STATUS.ACTIVE ? SESSION_STATUS.ACTIVE : SESSION_STATUS.ENDED}
+                      {session.status === SESSION_STATUS.ACTIVE ? 'Active' : session.status === SESSION_STATUS.NEW ? 'New' : 'Ended'}
                     </span>
                   </div>
                   

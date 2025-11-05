@@ -48,7 +48,7 @@ export interface Checkpoint {
   };
 }
 
-export type SessionStatus = 'Active' | 'Completed' | 'Ended' | 'Error';
+export type SessionStatus = 'New' | 'Active' | 'Completed' | 'Ended' | 'Error';
 
 export interface Session {
   id: string;

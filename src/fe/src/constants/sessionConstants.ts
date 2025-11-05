@@ -8,6 +8,7 @@
  * Must match backend SessionStatus enum (case-sensitive)
  */
 export const SESSION_STATUS = {
+  NEW: 'New',
   ACTIVE: 'Active',
   COMPLETED: 'Completed',
   ENDED: 'Ended',
