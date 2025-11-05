@@ -75,16 +75,23 @@ export default function TranscriptionPage({
         return;
       }
       
-      if (session.status !== SESSION_STATUS.ACTIVE) {
-        toast.error('This session has ended. You can only join active sessions.');
+      if (session.status !== SESSION_STATUS.ACTIVE && session.status !== SESSION_STATUS.NEW) {
+        toast.error('This session has ended. You can only join active or new sessions.');
         return;
       }
       
       setActiveSession(session);
-      setIsReadOnly(true);
+      const currentUser = localStorage.getItem('hoptranscribe_username') || '';
+      const isOwner = session.userName === currentUser;
+      setIsReadOnly(!isOwner);
       setCurrentView('session');
       setJoinSessionDialogOpen(false);
-      toast.success(`Joined session: ${session.title}`);
+      
+      if (isOwner) {
+        toast.success(`Rejoined your session: ${session.title}`);
+      } else {
+        toast.success(`Joined session: ${session.title} (View Only)`);
+      }
     } catch (error) {
       loggingService.error('Error joining session', 'TranscriptionPage', error as Error);
       toast.error('Failed to join session');
