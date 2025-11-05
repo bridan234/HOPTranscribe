@@ -15,6 +15,11 @@ do
       sed -i "s|__VITE_API_BASE_URL__|$VITE_API_BASE_URL|g" "$file"
     fi
     
+    # Replace VITE_SIGNALR_HUB_URL placeholder with actual environment variable
+    if [ ! -z "$VITE_SIGNALR_HUB_URL" ]; then
+      sed -i "s|__VITE_SIGNALR_HUB_URL__|$VITE_SIGNALR_HUB_URL|g" "$file"
+    fi
+    
     # Replace Application Insights connection string placeholder
     if [ ! -z "$APPLICATIONINSIGHTS_CONNECTION_STRING" ]; then
       sed -i "s|__APPLICATIONINSIGHTS_CONNECTION_STRING__|$APPLICATIONINSIGHTS_CONNECTION_STRING|g" "$file"
