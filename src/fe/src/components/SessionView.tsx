@@ -70,7 +70,7 @@ export function SessionView({
   });
 
   useEffect(() => {
-    if (session.status === SESSION_STATUS.ACTIVE || session.status === SESSION_STATUS.NEW) {
+    if (isReadOnly && (session.status === SESSION_STATUS.ACTIVE || session.status === SESSION_STATUS.NEW)) {
       signalRService.connect(session.sessionCode)
         .then(() => {
           setIsSignalRConnected(true);
@@ -78,13 +78,13 @@ export function SessionView({
         .catch((err) => {
           console.error('SignalR connection failed:', err);
         });
-
-      return () => {
-        signalRService.disconnect();
-        setIsSignalRConnected(false);
-      };
     }
-  }, [session.sessionCode, session.status]);
+
+    return () => {
+      signalRService.disconnect();
+      setIsSignalRConnected(false);
+    };
+  }, [session.sessionCode, isReadOnly]);
 
   useEffect(() => {
     if (!isSignalRConnected) return;
@@ -220,8 +220,13 @@ export function SessionView({
   }, [isReadOnly, session.status, connectionState, mediaIsRecording, disconnect, stopMedia]);
 
   const handleStartRecording = async () => {
-    
     try {
+      // Connect SignalR before starting recording
+      if (!isSignalRConnected) {
+        await signalRService.connect(session.sessionCode);
+        setIsSignalRConnected(true);
+      }
+      
       await startMedia();
       setShouldConnect(true);
       
@@ -251,6 +256,12 @@ export function SessionView({
 
   const handleResumeRecording = async () => {
     try {
+      // Reconnect SignalR when resuming
+      if (!isSignalRConnected) {
+        await signalRService.connect(session.sessionCode);
+        setIsSignalRConnected(true);
+      }
+      
       if (!stream) {
         await startMedia();
         setShouldConnect(true);
