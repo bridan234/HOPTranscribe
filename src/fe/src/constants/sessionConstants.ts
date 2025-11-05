@@ -5,12 +5,13 @@
 
 /**
  * Session Status Values
+ * Must match backend SessionStatus enum (case-sensitive)
  */
 export const SESSION_STATUS = {
-  ACTIVE: 'active',
-  COMPLETED: 'completed',
-  ENDED: 'ended',
-  ERROR: 'error',
+  ACTIVE: 'Active',
+  COMPLETED: 'Completed',
+  ENDED: 'Ended',
+  ERROR: 'Error',
 } as const;
 
 /**

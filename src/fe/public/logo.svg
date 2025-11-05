@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60">
+  <!-- Icon -->
+  <rect x="5" y="5" width="50" height="50" rx="10" fill="#2563eb"/>
+  <rect x="21" y="15" width="8" height="16" rx="4" fill="white"/>
+  <path d="M 17 28 Q 17 36 25 36 Q 33 36 33 28" stroke="white" stroke-width="2" fill="none"/>
+  <line x1="25" y1="36" x2="25" y2="42" stroke="white" stroke-width="2"/>
+  <line x1="21" y1="42" x2="29" y2="42" stroke="white" stroke-width="2"/>
+  
+  <!-- Cross -->
+  <line x1="35" y1="18" x2="42" y2="25" stroke="#fbbf24" stroke-width="2"/>
+  <line x1="42" y1="18" x2="35" y2="25" stroke="#fbbf24" stroke-width="2"/>
+  
+  <!-- Text -->
+  <text x="65" y="32" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#1e293b">HOP</text>
+  <text x="65" y="50" font-family="Arial, sans-serif" font-size="16" fill="#64748b">Transcribe</text>
+</svg>

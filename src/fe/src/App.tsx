@@ -4,7 +4,6 @@ import { Layout } from './components/Layout';
 import { BIBLE_VERSIONS, SCRIPTURE_DETECTION, LANGUAGES, AUDIO_SETTINGS, UI_SETTINGS, STORAGE_KEYS } from './constants/openaiConstants';
 import { loggingService } from './services/loggingService';
 
-// Helper functions for localStorage
 const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
     const item = localStorage.getItem(key);
@@ -26,7 +25,6 @@ const saveToStorage = <T,>(key: string, value: T): void => {
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   
-  // Settings state
   const [selectedDevice, setSelectedDevice] = useState<string>(() => 
     loadFromStorage(STORAGE_KEYS.SELECTED_DEVICE, AUDIO_SETTINGS.DEFAULT_DEVICE)
   );
@@ -59,14 +57,12 @@ export default function App() {
   );
 
   useEffect(() => {
-    // Load theme preference
     const savedTheme = localStorage.getItem('hoptranscribe_theme') as 'light' | 'dark' | null;
     if (savedTheme) {
       setTheme(savedTheme);
     }
   }, []);
 
-  // Save settings to localStorage
   useEffect(() => { saveToStorage(STORAGE_KEYS.SELECTED_DEVICE, selectedDevice); }, [selectedDevice]);
   useEffect(() => { saveToStorage(STORAGE_KEYS.BIBLE_VERSION, bibleVersion); }, [bibleVersion]);
   useEffect(() => { saveToStorage(STORAGE_KEYS.CUSTOM_VERSIONS, customVersions); }, [customVersions]);

@@ -23,7 +23,6 @@ interface SettingsPanelProps {
   onPrimaryLanguageChange?: (language: string) => void;
   customLanguages?: Array<{ code: string; name: string }>;
   onCustomLanguagesChange?: (languages: Array<{ code: string; name: string }>) => void;
-  // Additional settings
   autoScroll?: boolean;
   onAutoScrollChange?: (value: boolean) => void;
   showConfidence?: boolean;
@@ -34,7 +33,6 @@ interface SettingsPanelProps {
   onMinConfidenceChange?: (value: number) => void;
   maxReferences?: number;
   onMaxReferencesChange?: (value: number) => void;
-  // Theme
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;
 }
@@ -76,7 +74,6 @@ export function SettingsPanel({
   const [newVersion, setNewVersion] = useState('');
   const [editableVersions, setEditableVersions] = useState<string[]>(customVersions);
 
-  // Default languages
   const defaultLanguages = [
     { code: 'English', name: 'English' },
     { code: 'Spanish', name: 'Spanish (Español)' },
@@ -92,10 +89,8 @@ export function SettingsPanel({
     { code: 'Russian', name: 'Russian (Русский)' },
   ];
 
-  // Combine default and custom languages
   const allLanguages = [...defaultLanguages, ...customLanguages];
 
-  // Sync internal state with prop changes
   useEffect(() => {
     setPrimaryLanguage(initialPrimaryLanguage);
   }, [initialPrimaryLanguage]);
@@ -125,13 +120,10 @@ export function SettingsPanel({
   }, [initialMaxReferences]);
 
   useEffect(() => {
-    // Request microphone permissions and get available audio devices
     const getAudioDevices = async () => {
       try {
-        // Request permission first
         await navigator.mediaDevices.getUserMedia({ audio: true });
         
-        // Get all devices
         const devices = await navigator.mediaDevices.enumerateDevices();
         const audioInputs = devices.filter(device => device.kind === 'audioinput');
         setAudioDevices(audioInputs);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Session, TranscriptSegment, ScriptureReference } from '../models/Session';
 import { RecordingControls } from './RecordingControls';
 import { ScriptureReferences } from './ScriptureReferences';
@@ -14,6 +14,8 @@ import { copyToClipboard } from '../utils/clipboard';
 import { useMediaRecorder } from '../hooks/useMediaRecorder';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 import { signalRService } from '../services/signalRService';
+import { sessionService } from '../services/sessionService';
+import { loggingService } from '../services/loggingService';
 import { SIGNALR_STATES } from '../constants/signalRConstants';
 import { SESSION_STATUS, SESSION_MESSAGES, CONNECTION_STATUS_DISPLAY } from '../constants/sessionConstants';
 import { CONNECTION_STATES } from '../constants/openaiConstants';
@@ -48,11 +50,16 @@ export function SessionView({
   const [collaboratorCount, setCollaboratorCount] = useState(0);
   const [isSignalRConnected, setIsSignalRConnected] = useState(false);
   const lastBroadcastSegmentId = useRef<string | null>(null);
+  const sessionRef = useRef(session);
+  const onUpdateSessionRef = useRef(onUpdateSession);
   
-  // Media recording hook
+  useEffect(() => {
+    sessionRef.current = session;
+    onUpdateSessionRef.current = onUpdateSession;
+  }, [session, onUpdateSession]);
+  
   const { stream, isRecording: mediaIsRecording, error: mediaError, startRecording: startMedia, stopRecording: stopMedia } = useMediaRecorder({ deviceId: selectedDevice !== 'default' ? selectedDevice : undefined });
   
-  // WebSocket hook for real-time transcription
   const { connectionState, error: wsError, lastResult, connect, disconnect } = useRealtimeWebSocket({
     stream,
     autoConnect: false,
@@ -62,7 +69,6 @@ export function SessionView({
     maxReferences,
   });
 
-  // Connect to SignalR for real-time collaboration (only for active sessions)
   useEffect(() => {
     if (session.status === SESSION_STATUS.ACTIVE) {
       signalRService.connect(session.sessionCode)
@@ -80,27 +86,27 @@ export function SessionView({
     }
   }, [session.sessionCode, session.status]);
 
-  // Set up SignalR listeners for receiving real-time updates from other participants
   useEffect(() => {
     if (!isSignalRConnected) return;
 
     const handleReceiveTranscript = (segment: TranscriptSegment) => {
-      // Only update if this is from another participant (not our own broadcast)
       if (segment.id === lastBroadcastSegmentId.current) return;
 
+      const currentSession = sessionRef.current;
       const updatedSession = {
-        ...session,
-        transcripts: [...(session.transcripts || []), segment]
+        ...currentSession,
+        transcripts: [...(currentSession.transcripts || []), segment]
       };
-      onUpdateSession(updatedSession);
+      onUpdateSessionRef.current(updatedSession);
     };
 
     const handleReceiveScripture = (reference: ScriptureReference) => {
+      const currentSession = sessionRef.current;
       const updatedSession = {
-        ...session,
-        scriptureReferences: [...(session.scriptureReferences || []), reference]
+        ...currentSession,
+        scriptureReferences: [...(currentSession.scriptureReferences || []), reference]
       };
-      onUpdateSession(updatedSession);
+      onUpdateSessionRef.current(updatedSession);
     };
 
     const handleUserJoined = (data: { connectionId: string; timestamp: string }) => {
@@ -117,12 +123,10 @@ export function SessionView({
     signalRService.onReceiveScripture(handleReceiveScripture);
     signalRService.onUserJoined(handleUserJoined);
     signalRService.onUserLeft(handleUserLeft);
-
-    // Note: SignalR doesn't have a removeListener API, cleanup handled on disconnect
-  }, [isSignalRConnected, session, onUpdateSession]);
+  }, [isSignalRConnected]); 
 
   useEffect(() => {
-    if (shouldConnect && stream && connectionState === CONNECTION_STATES.DISCONNECTED) {
+    if (!isReadOnly && shouldConnect && stream && connectionState === CONNECTION_STATES.DISCONNECTED) {
       connect().then(() => {
         setShouldConnect(false);
         setHasConnected(true);
@@ -131,50 +135,67 @@ export function SessionView({
         setShouldConnect(false);
       });
     }
-  }, [shouldConnect, stream, connectionState, connect]);
+  }, [isReadOnly, shouldConnect, stream, connectionState, connect]);
 
-  // Update session when we get new transcription results
   useEffect(() => {
-    if (lastResult && lastResult.transcript) {
-      const newSegment: TranscriptSegment = {
-        id: `seg-${Date.now()}`,
-        text: lastResult.transcript,
-        timestamp: new Date(),
-        confidence: 0.9
-      };
+    if (isReadOnly || !lastResult || !lastResult.transcript) return;
+    
+    const newSegment: TranscriptSegment = {
+      id: `seg-${Date.now()}`,
+      text: lastResult.transcript,
+      timestamp: new Date(),
+      confidence: 0.9
+    };
 
-      const newReferences: ScriptureReference[] = (lastResult.matches || []).map((match: any) => ({
-        id: `ref-${Date.now()}-${Math.random()}`,
-        book: match.reference.split(' ')[0],
-        chapter: parseInt(match.reference.match(/\d+/)?.[0] || '1'),
-        verse: parseInt(match.reference.match(/:(\d+)/)?.[1] || '1'),
-        version: match.version || bibleVersion,
-        text: match.quote || '',
-        confidence: match.confidence || 0.5,
-        transcriptSegmentId: newSegment.id
-      }));
+    const newReferences: ScriptureReference[] = (lastResult.matches || []).map((match: any) => ({
+      id: `ref-${Date.now()}-${Math.random()}`,
+      book: match.reference.split(' ')[0],
+      chapter: parseInt(match.reference.match(/\d+/)?.[0] || '1'),
+      verse: parseInt(match.reference.match(/:(\d+)/)?.[1] || '1'),
+      version: match.version || bibleVersion,
+      text: match.quote || '',
+      confidence: match.confidence || 0.5,
+      transcriptSegmentId: newSegment.id
+    }));
 
-      const updatedSession = {
-        ...session,
-        transcripts: [...(session.transcripts || []), newSegment],
-        scriptureReferences: [...session.scriptureReferences, ...newReferences]
-      };
+    const updatedSession = {
+      ...session,
+      transcripts: [...(session.transcripts || []), newSegment],
+      scriptureReferences: [...session.scriptureReferences, ...newReferences]
+    };
+    
+    onUpdateSession(updatedSession);
+
+    sessionService.addTranscript(session.sessionCode, newSegment.text, newSegment.confidence)
+      .catch((err) => {
+        loggingService.error('Failed to persist transcript to backend', 'SessionView', err);
+      });
+
+    newReferences.forEach(ref => {
+      sessionService.addScripture(session.sessionCode, {
+        book: ref.book,
+        chapter: ref.chapter,
+        verse: ref.verse,
+        version: ref.version,
+        text: ref.text,
+        confidence: ref.confidence,
+        transcriptSegmentId: ref.transcriptSegmentId
+      }).catch((err) => {
+        loggingService.error('Failed to persist scripture reference to backend', 'SessionView', err);
+      });
+    });
+
+    if (isSignalRConnected) {
+      lastBroadcastSegmentId.current = newSegment.id;
       
-      onUpdateSession(updatedSession);
-
-      if (isSignalRConnected && !isReadOnly) {
-        lastBroadcastSegmentId.current = newSegment.id;
-        
-        signalRService.broadcastTranscript(session.sessionCode, newSegment);
-        
-        newReferences.forEach(ref => {
-          signalRService.broadcastScripture(session.sessionCode, ref);
-        });
-      }
+      signalRService.broadcastTranscript(session.sessionCode, newSegment);
+      
+      newReferences.forEach(ref => {
+        signalRService.broadcastScripture(session.sessionCode, ref);
+      });
     }
-  }, [lastResult, isSignalRConnected, isReadOnly, session.sessionCode]);
+  }, [isReadOnly, lastResult, isSignalRConnected, session.sessionCode]);
 
-  // Handle errors
   useEffect(() => {
     if (mediaError) {
       toast.error(`${SESSION_MESSAGES.MEDIA_ERROR}: ${mediaError}`);
@@ -184,7 +205,19 @@ export function SessionView({
     }
   }, [mediaError, wsError]);
 
+  useEffect(() => {
+    if (isReadOnly || session.status === SESSION_STATUS.ENDED) {
+      if (connectionState !== CONNECTION_STATES.DISCONNECTED) {
+        disconnect();
+      }
+      if (mediaIsRecording) {
+        stopMedia();
+      }
+    }
+  }, [isReadOnly, session.status, connectionState, mediaIsRecording, disconnect, stopMedia]);
+
   const handleStartRecording = async () => {
+    
     try {
       await startMedia();
       setShouldConnect(true);
@@ -209,7 +242,7 @@ export function SessionView({
       isRecording: false,
       isPaused: true
     });
-    toast.info(SESSION_MESSAGES.RECORDING_PAUSED);
+    toast.success(SESSION_MESSAGES.RECORDING_PAUSED);
   };
 
   const handleResumeRecording = async () => {
@@ -241,12 +274,14 @@ export function SessionView({
     disconnect();
     stopMedia();
     
-    onUpdateSession({
+    const updatedSession = {
       ...session,
       status: SESSION_STATUS.ENDED,
       isRecording: false,
       isPaused: false
-    });
+    };
+    
+    onUpdateSession(updatedSession);
     setShowEndConfirmation(false);
     toast.success(SESSION_MESSAGES.SESSION_ENDED);
   };
@@ -274,7 +309,6 @@ export function SessionView({
     }).format(dateObj);
   };
 
-  // Convert to format expected by existing components (reversed for newest first)
   const transcriptionSegments = [...(session.transcripts || [])].reverse().map(t => {
     const timestamp = new Date(t.timestamp);
     return {
@@ -290,7 +324,6 @@ export function SessionView({
     };
   });
 
-  // Group scripture references by transcript segment
   const segmentRefs = (session.transcripts || []).map(transcript => {
     const refsForSegment = (session.scriptureReferences || [])
       .filter(ref => ref.transcriptSegmentId === transcript.id)
@@ -316,11 +349,10 @@ export function SessionView({
       })(),
       references: refsForSegment
     };
-  }).filter(seg => seg.references.length > 0); // Only include segments with references
+  }).filter(seg => seg.references.length > 0);
 
   return (
     <div className="h-screen flex flex-col">
-      {/* Header */}
       <div className="bg-background border-b border-border px-3 sm:px-4 py-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 mb-3">
           <Button variant="ghost" onClick={onBack} className="gap-2 text-sm">
@@ -332,7 +364,18 @@ export function SessionView({
 
         <div className="flex flex-col lg:flex-row items-start justify-between gap-3 lg:gap-4">
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg sm:text-xl mb-1 text-foreground truncate">{session.title}</h1>
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-lg sm:text-xl text-foreground truncate">{session.title}</h1>
+              <span 
+                className={`px-2 py-0.5 rounded text-xs ${
+                  session.status === SESSION_STATUS.ENDED
+                    ? 'bg-gray-100 text-gray-800' 
+                    : 'bg-green-100 text-green-800'
+                }`}
+              >
+                {session.status === SESSION_STATUS.ENDED ? 'Ended' : 'Active'}
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
               <span className="truncate">Created by {session.userName}</span>
               <span className="hidden sm:inline">•</span>
@@ -383,9 +426,7 @@ export function SessionView({
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 overflow-hidden">
-        {/* Desktop: Resizable horizontal panels */}
         <div className="hidden md:block h-full">
           <ResizablePanelGroup direction="horizontal">
             <ResizablePanel defaultSize={70} minSize={50}>
@@ -412,7 +453,6 @@ export function SessionView({
           </ResizablePanelGroup>
         </div>
 
-        {/* Mobile: Stacked panels */}
         <div className="flex flex-col h-full md:hidden">
           <div className="h-1/2 overflow-hidden border-b border-border">
             <TranscriptionPanel
@@ -435,7 +475,6 @@ export function SessionView({
         </div>
       </div>
 
-      {/* End Session Confirmation Dialog */}
       <AlertDialog open={showEndConfirmation} onOpenChange={setShowEndConfirmation}>
         <AlertDialogContent>
           <AlertDialogHeader>

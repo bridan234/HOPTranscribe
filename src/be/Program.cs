@@ -26,7 +26,11 @@ try
         builder.Configuration.GetSection(nameof(ApplicationSettings))
     );
 
-    builder.Services.AddControllers();
+    builder.Services.AddControllers()
+        .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        });
     builder.Services.AddApplicationInsightsTelemetry(options =>
     {
         options.EnableAdaptiveSampling = true;

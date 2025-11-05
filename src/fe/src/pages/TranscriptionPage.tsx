@@ -9,6 +9,7 @@ import { Button } from '../components/ui/button';
 import { Plus, LogIn } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { loggingService } from '@/services/loggingService';
+import { SESSION_STATUS } from '@/constants/sessionConstants';
 
 type AppView = 'history' | 'session';
 
@@ -34,7 +35,6 @@ export default function TranscriptionPage({
   const [newSessionDialogOpen, setNewSessionDialogOpen] = useState(false);
   const [joinSessionDialogOpen, setJoinSessionDialogOpen] = useState(false);
 
-  // Load sessions on mount
   useEffect(() => {
     loadSessions();
   }, []);
@@ -74,7 +74,7 @@ export default function TranscriptionPage({
         return;
       }
       
-      if (session.status !== 'active') {
+      if (session.status !== SESSION_STATUS.ACTIVE) {
         toast.error('This session has ended. You can only join active sessions.');
         return;
       }
@@ -90,16 +90,32 @@ export default function TranscriptionPage({
     }
   };
 
-  const handleOpenSession = (session: Session) => {
-    setActiveSession(session);
-    
-    // Past sessions are always read-only
-    setIsReadOnly(session.status === 'ended');
-    
-    setCurrentView('session');
+  const handleOpenSession = async (session: Session) => {
+    try {
+      const fullSession = await sessionService.getSessionById(session.sessionCode);
+      
+      if (!fullSession) {
+        toast.error('Session not found');
+        return;
+      }
+      
+      setActiveSession(fullSession);
+      setIsReadOnly(fullSession.status === SESSION_STATUS.ENDED);
+      
+      setCurrentView('session');
+    } catch (error) {
+      loggingService.error('Error opening session', 'TranscriptionPage', error as Error);
+      toast.error('Failed to open session');
+    }
   };
 
   const handleUpdateSession = async (updatedSession: Session) => {
+    setActiveSession(updatedSession);
+    
+    if (isReadOnly) {
+      return;
+    }
+    
     try {
       await sessionService.updateSession(updatedSession.sessionCode, {
         title: updatedSession.title,
@@ -107,7 +123,6 @@ export default function TranscriptionPage({
         isRecording: updatedSession.isRecording,
         isPaused: updatedSession.isPaused
       });
-      setActiveSession(updatedSession);
       await loadSessions();
     } catch (error) {
       loggingService.error('Error updating session', 'TranscriptionPage', error as Error);
@@ -128,7 +143,6 @@ export default function TranscriptionPage({
       
       {currentView === 'history' ? (
         <div className="max-w-6xl mx-auto">
-          {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-6 sm:mb-8">
             <Button 
               onClick={() => setNewSessionDialogOpen(true)}
@@ -147,7 +161,6 @@ export default function TranscriptionPage({
             </Button>
           </div>
 
-          {/* Session History */}
           <SessionHistory 
             sessions={sessions} 
             onOpenSession={handleOpenSession}
@@ -167,7 +180,6 @@ export default function TranscriptionPage({
         />
       ) : null}
 
-      {/* Dialogs */}
       <CreateSessionDialog
         open={newSessionDialogOpen}
         onOpenChange={setNewSessionDialogOpen}

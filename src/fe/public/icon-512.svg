@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#2563eb" rx="102"/>
+  
+  <!-- Microphone -->
+  <rect x="214" y="128" width="84" height="148" rx="42" fill="white"/>
+  <path d="M 179 235 Q 179 298 256 298 Q 333 298 333 235" stroke="white" stroke-width="16" fill="none"/>
+  <line x1="256" y1="298" x2="256" y2="352" stroke="white" stroke-width="16"/>
+  <line x1="214" y1="352" x2="298" y2="352" stroke="white" stroke-width="16"/>
+  
+  <!-- Cross overlay -->
+  <line x1="318" y1="165" x2="371" y2="218" stroke="#fbbf24" stroke-width="16" stroke-linecap="round"/>
+  <line x1="371" y1="165" x2="318" y2="218" stroke="#fbbf24" stroke-width="16" stroke-linecap="round"/>
+</svg>

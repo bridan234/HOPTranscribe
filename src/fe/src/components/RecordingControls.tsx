@@ -25,7 +25,6 @@ export function RecordingControls({
     return null;
   }
 
-  // Session active but not recording yet
   if (!isRecording && !isPaused) {
     return (
       <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -38,7 +37,6 @@ export function RecordingControls({
     );
   }
 
-  // Currently recording
   if (isRecording && !isPaused) {
     return (
       <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
@@ -59,7 +57,6 @@ export function RecordingControls({
     );
   }
 
-  // Paused
   if (isPaused) {
     return (
       <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">

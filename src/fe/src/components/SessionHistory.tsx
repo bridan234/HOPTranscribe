@@ -4,6 +4,7 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Clock, Calendar, User, Search } from 'lucide-react';
+import { SESSION_STATUS } from '../constants/sessionConstants';
 
 interface SessionHistoryProps {
   sessions: Session[];
@@ -99,12 +100,12 @@ export function SessionHistory({ sessions, onOpenSession }: SessionHistoryProps)
                     <h3 className="truncate text-sm sm:text-base">{session.title}</h3>
                     <span 
                       className={`px-2 py-0.5 rounded text-xs ${
-                        session.status === 'active' 
+                        session.status === SESSION_STATUS.ACTIVE
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-gray-100 text-gray-800'
                       }`}
                     >
-                      {session.status === 'active' ? 'Active' : 'Ended'}
+                      {session.status === SESSION_STATUS.ACTIVE ? SESSION_STATUS.ACTIVE : SESSION_STATUS.ENDED}
                     </span>
                   </div>
                   

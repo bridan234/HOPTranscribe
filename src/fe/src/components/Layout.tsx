@@ -59,11 +59,11 @@ export function Layout({
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <h1 className="text-2xl sm:text-3xl font-bold mb-1">HOP Transcribe</h1>
+      <header className="border-b bg-white shadow-sm">
+        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-1 items-start">
+              <img src="/logo.svg" alt="HOP Transcribe" className="h-14 sm:h-16 w-auto" />
               <p className="text-xs sm:text-sm text-gray-600">
                 Real-time audio transcription with AI-powered scripture reference detection
               </p>
