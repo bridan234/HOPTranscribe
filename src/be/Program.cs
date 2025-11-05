@@ -101,6 +101,9 @@ try
 
     app.UseSerilogRequestLogging();
     app.UseCors(ApiConstants.PolicyNames.CorsPolicy);
+    
+    app.UseWebSockets();
+    
     app.UseHttpsRedirection();
     app.MapControllers();
     app.MapHub<SessionHub>("/sessionHub");
