@@ -140,61 +140,64 @@ export function SessionView({
   useEffect(() => {
     if (isReadOnly || !lastResult || !lastResult.transcript) return;
     
-    const newSegment: TranscriptSegment = {
-      id: `seg-${Date.now()}`,
-      text: lastResult.transcript,
-      timestamp: new Date(),
-      confidence: 0.9
+    const processTranscription = async () => {
+      try {
+        const savedSegment = await sessionService.addTranscript(
+          session.sessionCode, 
+          lastResult.transcript, 
+          0.9
+        );
+
+        const newReferences: ScriptureReference[] = (lastResult.matches || []).map((match: any) => ({
+          id: `ref-${Date.now()}-${Math.random()}`,
+          book: match.reference.split(' ')[0],
+          chapter: parseInt(match.reference.match(/\d+/)?.[0] || '1'),
+          verse: parseInt(match.reference.match(/:(\d+)/)?.[1] || '1'),
+          version: match.version || bibleVersion,
+          text: match.quote || '',
+          confidence: match.confidence || 0.5,
+          transcriptSegmentId: savedSegment.id
+        }));
+
+        const updatedSession = {
+          ...session,
+          transcripts: [...(session.transcripts || []), savedSegment],
+          scriptureReferences: [...session.scriptureReferences, ...newReferences]
+        };
+        
+        onUpdateSession(updatedSession);
+
+        for (const ref of newReferences) {
+          try {
+            await sessionService.addScripture(session.sessionCode, {
+              book: ref.book,
+              chapter: ref.chapter,
+              verse: ref.verse,
+              version: ref.version,
+              text: ref.text,
+              confidence: ref.confidence,
+              transcriptSegmentId: ref.transcriptSegmentId
+            });
+          } catch (err) {
+            loggingService.error('Failed to persist scripture reference to backend', 'SessionView', err as Error);
+          }
+        }
+
+        if (isSignalRConnected) {
+          lastBroadcastSegmentId.current = savedSegment.id;
+          signalRService.broadcastTranscript(session.sessionCode, savedSegment);
+          
+          newReferences.forEach(ref => {
+            signalRService.broadcastScripture(session.sessionCode, ref);
+          });
+        }
+      } catch (err) {
+        loggingService.error('Failed to persist transcript to backend', 'SessionView', err as Error);
+      }
     };
 
-    const newReferences: ScriptureReference[] = (lastResult.matches || []).map((match: any) => ({
-      id: `ref-${Date.now()}-${Math.random()}`,
-      book: match.reference.split(' ')[0],
-      chapter: parseInt(match.reference.match(/\d+/)?.[0] || '1'),
-      verse: parseInt(match.reference.match(/:(\d+)/)?.[1] || '1'),
-      version: match.version || bibleVersion,
-      text: match.quote || '',
-      confidence: match.confidence || 0.5,
-      transcriptSegmentId: newSegment.id
-    }));
-
-    const updatedSession = {
-      ...session,
-      transcripts: [...(session.transcripts || []), newSegment],
-      scriptureReferences: [...session.scriptureReferences, ...newReferences]
-    };
-    
-    onUpdateSession(updatedSession);
-
-    sessionService.addTranscript(session.sessionCode, newSegment.text, newSegment.confidence)
-      .catch((err) => {
-        loggingService.error('Failed to persist transcript to backend', 'SessionView', err);
-      });
-
-    newReferences.forEach(ref => {
-      sessionService.addScripture(session.sessionCode, {
-        book: ref.book,
-        chapter: ref.chapter,
-        verse: ref.verse,
-        version: ref.version,
-        text: ref.text,
-        confidence: ref.confidence,
-        transcriptSegmentId: ref.transcriptSegmentId
-      }).catch((err) => {
-        loggingService.error('Failed to persist scripture reference to backend', 'SessionView', err);
-      });
-    });
-
-    if (isSignalRConnected) {
-      lastBroadcastSegmentId.current = newSegment.id;
-      
-      signalRService.broadcastTranscript(session.sessionCode, newSegment);
-      
-      newReferences.forEach(ref => {
-        signalRService.broadcastScripture(session.sessionCode, ref);
-      });
-    }
-  }, [isReadOnly, lastResult, isSignalRConnected, session.sessionCode]);
+    processTranscription();
+  }, [isReadOnly, lastResult, isSignalRConnected, session.sessionCode, bibleVersion]);
 
   useEffect(() => {
     if (mediaError) {
