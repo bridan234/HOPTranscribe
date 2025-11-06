@@ -119,10 +119,17 @@ export function SessionView({
       toast.info(SESSION_MESSAGES.PARTICIPANT_LEFT);
     };
 
+    const handleReceiveSessionUpdate = (sessionUpdate: Partial<Session>) => {
+      const currentSession = sessionRef.current;
+      const updatedSession = { ...currentSession, ...sessionUpdate };
+      onUpdateSessionRef.current(updatedSession);
+    };
+
     signalRService.onReceiveTranscript(handleReceiveTranscript);
     signalRService.onReceiveScripture(handleReceiveScripture);
     signalRService.onUserJoined(handleUserJoined);
     signalRService.onUserLeft(handleUserLeft);
+    signalRService.onReceiveSessionUpdate(handleReceiveSessionUpdate);
   }, [isSignalRConnected]); 
 
   useEffect(() => {
@@ -183,13 +190,13 @@ export function SessionView({
           }
         }
 
-        if (isSignalRConnected) {
+        if (signalRService.isConnected()) {
           lastBroadcastSegmentId.current = savedSegment.id;
-          signalRService.broadcastTranscript(session.sessionCode, savedSegment);
+          await signalRService.broadcastTranscript(session.sessionCode, savedSegment);
           
-          newReferences.forEach(ref => {
-            signalRService.broadcastScripture(session.sessionCode, ref);
-          });
+          for (const ref of newReferences) {
+            await signalRService.broadcastScripture(session.sessionCode, ref);
+          }
         }
       } catch (err) {
         loggingService.error('Failed to persist transcript to backend', 'SessionView', err as Error);
@@ -221,10 +228,12 @@ export function SessionView({
 
   const handleStartRecording = async () => {
     try {
-      // Connect SignalR before starting recording
+      // Connect SignalR before starting recording and wait for it
       if (!isSignalRConnected) {
         await signalRService.connect(session.sessionCode);
         setIsSignalRConnected(true);
+        // Small delay to ensure SignalR handlers are registered
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       await startMedia();
@@ -243,14 +252,24 @@ export function SessionView({
     }
   };
 
-  const handlePauseRecording = () => {
+  const handlePauseRecording = async () => {
     disconnect();
     
-    onUpdateSession({
+    const updatedSession = {
       ...session,
       isRecording: false,
       isPaused: true
-    });
+    };
+    
+    onUpdateSession(updatedSession);
+    
+    if (signalRService.isConnected()) {
+      await signalRService.broadcastSessionUpdate(session.sessionCode, {
+        isRecording: false,
+        isPaused: true
+      });
+    }
+    
     toast.success(SESSION_MESSAGES.RECORDING_PAUSED);
   };
 
@@ -274,7 +293,16 @@ export function SessionView({
         isRecording: true,
         isPaused: false
       };
+      
       onUpdateSession(updatedSession);
+      
+      if (signalRService.isConnected()) {
+        await signalRService.broadcastSessionUpdate(session.sessionCode, {
+          isRecording: true,
+          isPaused: false
+        });
+      }
+      
       toast.success(SESSION_MESSAGES.RECORDING_RESUMED);
     } catch (err) {
       toast.error(`${SESSION_MESSAGES.RESUME_FAILED}: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -285,7 +313,7 @@ export function SessionView({
     setShowEndConfirmation(true);
   };
 
-  const handleConfirmEndSession = () => {
+  const handleConfirmEndSession = async () => {
     disconnect();
     stopMedia();
     
@@ -295,6 +323,14 @@ export function SessionView({
       isRecording: false,
       isPaused: false
     };
+    
+    if (signalRService.isConnected()) {
+      await signalRService.broadcastSessionUpdate(session.sessionCode, {
+        status: SESSION_STATUS.ENDED,
+        isRecording: false,
+        isPaused: false
+      });
+    }
     
     onUpdateSession(updatedSession);
     setShowEndConfirmation(false);
