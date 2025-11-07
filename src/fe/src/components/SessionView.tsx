@@ -49,7 +49,6 @@ export function SessionView({
   const [hasConnected, setHasConnected] = useState(false);
   const [collaboratorCount, setCollaboratorCount] = useState(0);
   const [isSignalRConnected, setIsSignalRConnected] = useState(false);
-  const lastBroadcastSegmentId = useRef<string | null>(null);
   const sessionRef = useRef(session);
   const onUpdateSessionRef = useRef(onUpdateSession);
   
@@ -90,8 +89,6 @@ export function SessionView({
     if (!isSignalRConnected) return;
 
     const handleReceiveTranscript = (segment: TranscriptSegment) => {
-      if (segment.id === lastBroadcastSegmentId.current) return;
-
       const currentSession = sessionRef.current;
       const updatedSession = {
         ...currentSession,
@@ -166,14 +163,7 @@ export function SessionView({
           transcriptSegmentId: savedSegment.id
         }));
 
-        const updatedSession = {
-          ...session,
-          transcripts: [...(session.transcripts || []), savedSegment],
-          scriptureReferences: [...session.scriptureReferences, ...newReferences]
-        };
-        
-        onUpdateSession(updatedSession);
-
+        // Persist scripture references to backend
         for (const ref of newReferences) {
           try {
             await sessionService.addScripture(session.sessionCode, {
@@ -190,12 +180,16 @@ export function SessionView({
           }
         }
 
+        // Broadcast to SignalR - viewers will receive via handlers
         if (signalRService.isConnected()) {
-          lastBroadcastSegmentId.current = savedSegment.id;
-          await signalRService.broadcastTranscript(session.sessionCode, savedSegment);
-          
-          for (const ref of newReferences) {
-            await signalRService.broadcastScripture(session.sessionCode, ref);
+          try {
+            await signalRService.broadcastTranscript(session.sessionCode, savedSegment);
+            
+            for (const ref of newReferences) {
+              await signalRService.broadcastScripture(session.sessionCode, ref);
+            }
+          } catch (err) {
+            loggingService.warn('SignalR broadcast failed', 'SessionView', err as Error);
           }
         }
       } catch (err) {
@@ -204,7 +198,7 @@ export function SessionView({
     };
 
     processTranscription();
-  }, [isReadOnly, lastResult, isSignalRConnected, session.sessionCode, bibleVersion]);
+  }, [isReadOnly, lastResult, session.sessionCode, bibleVersion]);
 
   useEffect(() => {
     if (mediaError) {
