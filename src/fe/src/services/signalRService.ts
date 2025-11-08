@@ -13,6 +13,8 @@ type ScriptureCallback = (reference: ScriptureReference) => void;
 type SessionUpdateCallback = (session: Partial<Session>) => void;
 type UserJoinedCallback = (data: { connectionId: string; timestamp: string }) => void;
 type UserLeftCallback = (data: { connectionId: string; timestamp: string }) => void;
+type TranscriptBundle = { transcript: TranscriptSegment; references: ScriptureReference[] };
+type TranscriptBundleCallback = (bundle: TranscriptBundle) => void;
 
 class SignalRService {
   private connection: signalR.HubConnection | null = null;
@@ -89,9 +91,19 @@ class SignalRService {
     this.connection.on(SIGNALR_METHODS.RECEIVE_TRANSCRIPT, callback);
   }
 
+  offReceiveTranscript(callback: TranscriptCallback): void {
+    if (!this.connection) return;
+    this.connection.off(SIGNALR_METHODS.RECEIVE_TRANSCRIPT, callback);
+  }
+
   onReceiveScripture(callback: ScriptureCallback): void {
     if (!this.connection) return;
     this.connection.on(SIGNALR_METHODS.RECEIVE_SCRIPTURE, callback);
+  }
+
+  offReceiveScripture(callback: ScriptureCallback): void {
+    if (!this.connection) return;
+    this.connection.off(SIGNALR_METHODS.RECEIVE_SCRIPTURE, callback);
   }
 
   onReceiveSessionUpdate(callback: SessionUpdateCallback): void {
@@ -99,14 +111,39 @@ class SignalRService {
     this.connection.on(SIGNALR_METHODS.RECEIVE_SESSION_UPDATE, callback);
   }
 
+  offReceiveSessionUpdate(callback: SessionUpdateCallback): void {
+    if (!this.connection) return;
+    this.connection.off(SIGNALR_METHODS.RECEIVE_SESSION_UPDATE, callback);
+  }
+
+  onReceiveTranscriptBundle(callback: TranscriptBundleCallback): void {
+    if (!this.connection) return;
+    this.connection.on(SIGNALR_METHODS.RECEIVE_TRANSCRIPT_BUNDLE, callback);
+  }
+
+  offReceiveTranscriptBundle(callback: TranscriptBundleCallback): void {
+    if (!this.connection) return;
+    this.connection.off(SIGNALR_METHODS.RECEIVE_TRANSCRIPT_BUNDLE, callback);
+  }
+
   onUserJoined(callback: UserJoinedCallback): void {
     if (!this.connection) return;
     this.connection.on(SIGNALR_METHODS.USER_JOINED, callback);
   }
 
+  offUserJoined(callback: UserJoinedCallback): void {
+    if (!this.connection) return;
+    this.connection.off(SIGNALR_METHODS.USER_JOINED, callback);
+  }
+
   onUserLeft(callback: UserLeftCallback): void {
     if (!this.connection) return;
     this.connection.on(SIGNALR_METHODS.USER_LEFT, callback);
+  }
+
+  offUserLeft(callback: UserLeftCallback): void {
+    if (!this.connection) return;
+    this.connection.off(SIGNALR_METHODS.USER_LEFT, callback);
   }
 
   async broadcastTranscript(sessionCode: string, segment: TranscriptSegment): Promise<void> {
@@ -143,6 +180,19 @@ class SignalRService {
 
     try {
       await this.connection.invoke(SIGNALR_METHODS.BROADCAST_SESSION_UPDATE, sessionCode, session);
+    } catch (error) {
+      loggingService.error(SIGNALR_ERRORS.BROADCAST_FAILED, 'SignalR', error as Error);
+    }
+  }
+
+  async broadcastTranscriptBundle(sessionCode: string, bundle: TranscriptBundle): Promise<void> {
+    if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
+      loggingService.warn(SIGNALR_ERRORS.NOT_CONNECTED, 'SignalR');
+      return;
+    }
+
+    try {
+      await this.connection.invoke(SIGNALR_METHODS.BROADCAST_TRANSCRIPT_BUNDLE, sessionCode, bundle);
     } catch (error) {
       loggingService.error(SIGNALR_ERRORS.BROADCAST_FAILED, 'SignalR', error as Error);
     }

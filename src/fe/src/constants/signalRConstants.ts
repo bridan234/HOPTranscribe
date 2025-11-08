@@ -39,11 +39,13 @@ export const SIGNALR_METHODS = {
   BROADCAST_TRANSCRIPT: 'BroadcastTranscript',
   BROADCAST_SCRIPTURE: 'BroadcastScripture',
   BROADCAST_SESSION_UPDATE: 'BroadcastSessionUpdate',
+  BROADCAST_TRANSCRIPT_BUNDLE: 'BroadcastTranscriptBundle',
   
   // Server -> Client events
   RECEIVE_TRANSCRIPT: 'ReceiveTranscript',
   RECEIVE_SCRIPTURE: 'ReceiveScripture',
   RECEIVE_SESSION_UPDATE: 'ReceiveSessionUpdate',
+  RECEIVE_TRANSCRIPT_BUNDLE: 'ReceiveTranscriptBundle',
   USER_JOINED: 'UserJoined',
   USER_LEFT: 'UserLeft',
 } as const;

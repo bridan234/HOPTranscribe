@@ -69,40 +69,40 @@ export function SessionView({
   });
 
   useEffect(() => {
-    if (isReadOnly && (session.status === SESSION_STATUS.ACTIVE || session.status === SESSION_STATUS.NEW)) {
-      signalRService.connect(session.sessionCode)
-        .then(() => {
-          setIsSignalRConnected(true);
-        })
-        .catch((err) => {
-          console.error('SignalR connection failed:', err);
-        });
-    }
+    let cancelled = false;
+    // Connect once per sessionCode; avoid disconnect on status changes to prevent message gaps
+    signalRService.connect(session.sessionCode)
+      .then(() => {
+        if (!cancelled) setIsSignalRConnected(true);
+      })
+      .catch((err) => {
+        console.error('SignalR connection failed:', err);
+      });
 
     return () => {
+      cancelled = true;
       signalRService.disconnect();
       setIsSignalRConnected(false);
     };
-  }, [session.sessionCode, isReadOnly]);
+  }, [session.sessionCode]);
 
   useEffect(() => {
     if (!isSignalRConnected) return;
 
-    const handleReceiveTranscript = (segment: TranscriptSegment) => {
+    const handleReceiveBundle = (bundle: { transcript: TranscriptSegment; references: ScriptureReference[] }) => {
       const currentSession = sessionRef.current;
-      const updatedSession = {
-        ...currentSession,
-        transcripts: [...(currentSession.transcripts || []), segment]
-      };
-      onUpdateSessionRef.current(updatedSession);
-    };
+      // Dedupe transcript
+      const hasTranscript = (currentSession.transcripts || []).some(t => t.id === bundle.transcript.id);
+      const newTranscripts = hasTranscript
+        ? currentSession.transcripts || []
+        : [...(currentSession.transcripts || []), bundle.transcript];
 
-    const handleReceiveScripture = (reference: ScriptureReference) => {
-      const currentSession = sessionRef.current;
-      const updatedSession = {
-        ...currentSession,
-        scriptureReferences: [...(currentSession.scriptureReferences || []), reference]
-      };
+      // Dedupe references
+      const existingRefs = currentSession.scriptureReferences || [];
+      const toAdd = bundle.references.filter(r => !existingRefs.some(er => er.id === r.id));
+      const newRefs = [...existingRefs, ...toAdd];
+
+      const updatedSession = { ...currentSession, transcripts: newTranscripts, scriptureReferences: newRefs };
       onUpdateSessionRef.current(updatedSession);
     };
 
@@ -122,11 +122,18 @@ export function SessionView({
       onUpdateSessionRef.current(updatedSession);
     };
 
-    signalRService.onReceiveTranscript(handleReceiveTranscript);
-    signalRService.onReceiveScripture(handleReceiveScripture);
+    signalRService.onReceiveTranscriptBundle(handleReceiveBundle);
     signalRService.onUserJoined(handleUserJoined);
     signalRService.onUserLeft(handleUserLeft);
     signalRService.onReceiveSessionUpdate(handleReceiveSessionUpdate);
+
+    // Cleanup: Remove handlers when component unmounts or connection changes
+    return () => {
+      signalRService.offReceiveTranscriptBundle(handleReceiveBundle);
+      signalRService.offUserJoined(handleUserJoined);
+      signalRService.offUserLeft(handleUserLeft);
+      signalRService.offReceiveSessionUpdate(handleReceiveSessionUpdate);
+    };
   }, [isSignalRConnected]); 
 
   useEffect(() => {
@@ -180,18 +187,22 @@ export function SessionView({
           }
         }
 
-        // Broadcast to SignalR - viewers will receive via handlers
         if (signalRService.isConnected()) {
           try {
-            await signalRService.broadcastTranscript(session.sessionCode, savedSegment);
-            
-            for (const ref of newReferences) {
-              await signalRService.broadcastScripture(session.sessionCode, ref);
-            }
+            await signalRService.broadcastTranscriptBundle(session.sessionCode, {
+              transcript: savedSegment,
+              references: newReferences
+            });
           } catch (err) {
             loggingService.warn('SignalR broadcast failed', 'SessionView', err as Error);
           }
         }
+
+        onUpdateSession({
+          ...session,
+          transcripts: [...(session.transcripts || []), savedSegment],
+          scriptureReferences: [...session.scriptureReferences, ...newReferences]
+        });
       } catch (err) {
         loggingService.error('Failed to persist transcript to backend', 'SessionView', err as Error);
       }
@@ -460,7 +471,7 @@ export function SessionView({
                  connectionState === CONNECTION_STATES.DISCONNECTED && hasConnected ? CONNECTION_STATUS_DISPLAY.DISCONNECTED.LABEL :
                  CONNECTION_STATUS_DISPLAY.NOT_CONNECTED.LABEL}
               </span>
-              {isSignalRConnected && session.status === SIGNALR_STATES.ACTIVE && (
+              {isSignalRConnected && session.status === SESSION_STATUS.ACTIVE && (
                 <Badge variant="secondary" className="flex items-center gap-1">
                   <Users className="w-3 h-3" />
                   {collaboratorCount + 1}

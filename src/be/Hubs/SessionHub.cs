@@ -49,6 +49,12 @@ public class SessionHub : Hub
         await Clients.Group(sessionCode).SendAsync("ReceiveScripture", reference);
     }
 
+    public async Task BroadcastTranscriptBundle(string sessionCode, object payload)
+    {
+        _logger.LogDebug("Broadcasting transcript bundle to session {SessionCode}", sessionCode);
+        await Clients.Group(sessionCode).SendAsync("ReceiveTranscriptBundle", payload);
+    }
+
     public async Task BroadcastSessionUpdate(string sessionCode, object session)
     {
         _logger.LogDebug("Broadcasting session update to {SessionCode}", sessionCode);
