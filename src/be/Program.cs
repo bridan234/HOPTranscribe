@@ -1,9 +1,11 @@
 using HOPTranscribe.Configuration;
 using HOPTranscribe.Constants;
+using HOPTranscribe.Data;
 using HOPTranscribe.Hubs;
 using HOPTranscribe.Middleware;
 using HOPTranscribe.Models;
 using HOPTranscribe.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Serilog;
 
@@ -78,18 +80,49 @@ try
 
     builder.Services.AddMemoryCache();
 
+    // SQLite in production, InMemory in development
+    if (builder.Environment.IsDevelopment())
+    {
+        builder.Services.AddSingleton<ISessionService, InMemorySessionService>();
+        Log.Information("Development: Using InMemorySessionService");
+    }
+    else
+    {
+        var connectionString = builder.Configuration["SessionStorage:ConnectionString"] 
+            ?? "Data Source=/data/sessions.db;Cache=Shared;Mode=ReadWriteCreate";
+
+        builder.Services.AddDbContext<SessionDbContext>(options =>
+        {
+            options.UseSqlite(connectionString);
+        });
+
+        builder.Services.AddScoped<ISessionService, DatabaseSessionService>();
+        Log.Information("Production: Using DatabaseSessionService with SQLite at {ConnectionString}", connectionString);
+    }
+
     builder.Services.AddHttpClient<IOpenAIService, OpenAIService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(30);
     });
 
     builder.Services.AddScoped<IClientLoggingService, ClientLoggingService>();
-    builder.Services.AddSingleton<ISessionService, InMemorySessionService>();
 
     builder.Services.AddOpenApi();
     builder.Services.AddHealthChecks();
 
     var app = builder.Build();
+
+    if (!app.Environment.IsDevelopment())
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetService<SessionDbContext>();
+        if (dbContext != null)
+        {
+            Log.Information("Applying database migrations...");
+            dbContext.Database.Migrate();
+            Log.Information("Database migrations applied successfully");
+        }
+    }
 
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseMiddleware<RequestLoggingMiddleware>();

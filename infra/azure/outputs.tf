@@ -54,3 +54,19 @@ output "application_insights_app_id" {
   description = "Application Insights app ID"
   value       = azurerm_application_insights.insights.app_id
 }
+
+output "storage_account_name" {
+  description = "Storage account name for sessions"
+  value       = azurerm_storage_account.sessions.name
+}
+
+output "sessions_file_share_name" {
+  description = "File share name for sessions database"
+  value       = azurerm_storage_share.sessions_db.name
+}
+
+output "storage_account_primary_key" {
+  description = "Storage account primary access key"
+  value       = azurerm_storage_account.sessions.primary_access_key
+  sensitive   = true
+}
