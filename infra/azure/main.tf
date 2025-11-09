@@ -215,15 +215,6 @@ resource "azurerm_container_app" "backend" {
   tags = var.tags
 }
 
-# Role assignment for backend to access storage account
-resource "azurerm_role_assignment" "backend_storage" {
-  scope                = azurerm_storage_account.sessions.id
-  role_definition_name = "Storage File Data SMB Share Contributor"
-  principal_id         = azurerm_user_assigned_identity.backend.principal_id
-
-  depends_on = [azurerm_user_assigned_identity.backend]
-}
-
 # Frontend Container App
 resource "azurerm_container_app" "frontend" {
   name                         = "${var.project_name}-web"
