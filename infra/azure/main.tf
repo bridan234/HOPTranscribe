@@ -79,6 +79,15 @@ resource "azurerm_container_app_environment_storage" "sessions_storage" {
   access_mode                  = "ReadWrite"
 }
 
+# User Assigned Identity for backend container app
+resource "azurerm_user_assigned_identity" "backend" {
+  name                = "${var.project_name}-${var.environment}-backend-identity"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+
+  tags = var.tags
+}
+
 # Container Apps Environment
 resource "azurerm_container_app_environment" "env" {
   name                       = "${var.project_name}-${var.environment}-env"
@@ -97,7 +106,8 @@ resource "azurerm_container_app" "backend" {
   revision_mode                = "Single"
 
   identity {
-    type = "SystemAssigned"
+    type         = "SystemAssigned, UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.backend.id]
   }
 
   registry {
@@ -209,9 +219,9 @@ resource "azurerm_container_app" "backend" {
 resource "azurerm_role_assignment" "backend_storage" {
   scope                = azurerm_storage_account.sessions.id
   role_definition_name = "Storage File Data SMB Share Contributor"
-  principal_id         = azurerm_container_app.backend.identity.0.principal_id
+  principal_id         = azurerm_user_assigned_identity.backend.principal_id
 
-  depends_on = [azurerm_container_app.backend]
+  depends_on = [azurerm_user_assigned_identity.backend]
 }
 
 # Frontend Container App
