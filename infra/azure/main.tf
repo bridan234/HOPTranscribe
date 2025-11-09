@@ -53,7 +53,7 @@ resource "azurerm_application_insights" "insights" {
 
 # Storage Account for SQLite database file
 resource "azurerm_storage_account" "sessions" {
-  name                     = "${var.project_name}${var.environment}sessions"
+  name                     = "${replace(var.project_name, "-", "")}${var.environment}st"
   resource_group_name      = azurerm_resource_group.main.name
   location                 = azurerm_resource_group.main.location
   account_tier             = "Standard"
