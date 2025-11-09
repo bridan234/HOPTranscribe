@@ -19,8 +19,9 @@ WORKDIR /app
 # Copy published app from build stage
 COPY --from=build /app/publish .
 
-# Create logs directory
-RUN mkdir -p /app/logs && chmod 777 /app/logs
+# Create logs and data directories with write permissions
+RUN mkdir -p /app/logs && chmod 777 /app/logs && \
+    mkdir -p /data && chmod 777 /data
 
 # Expose port
 EXPOSE 8080
