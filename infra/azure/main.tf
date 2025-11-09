@@ -209,7 +209,7 @@ resource "azurerm_container_app" "backend" {
 resource "azurerm_role_assignment" "backend_storage" {
   scope                = azurerm_storage_account.sessions.id
   role_definition_name = "Storage File Data SMB Share Contributor"
-  principal_id         = azurerm_container_app.backend.identity[0].principal_id
+  principal_id         = azurerm_container_app.backend.identity.principal_id
 }
 
 # Frontend Container App
