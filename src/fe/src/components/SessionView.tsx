@@ -20,6 +20,39 @@ import { SIGNALR_STATES } from '../constants/signalRConstants';
 import { SESSION_STATUS, SESSION_MESSAGES, CONNECTION_STATUS_DISPLAY } from '../constants/sessionConstants';
 import { CONNECTION_STATES } from '../constants/openaiConstants';
 
+function parseScriptureReference(referenceString: string): { book: string; chapter: number; verse: number } {
+  const match = referenceString.match(/^(\d+\s+)?([\w\s]+?)\s+(\d+):(\d+)$/);
+  
+  if (match) {
+    const numPrefix = match[1] ? match[1].trim() : '';
+    const bookName = match[2].trim();
+    const chapter = parseInt(match[3], 10);
+    const verse = parseInt(match[4], 10);
+    
+    const fullBook = numPrefix ? `${numPrefix} ${bookName}` : bookName;
+    
+    return { book: fullBook, chapter, verse };
+  }
+  
+  const parts = referenceString.split(' ');
+  const lastPart = parts[parts.length - 1];
+  const chapterVerse = lastPart.match(/(\d+):(\d+)/);
+  
+  if (chapterVerse) {
+    return {
+      book: parts.slice(0, -1).join(' '),
+      chapter: parseInt(chapterVerse[1], 10),
+      verse: parseInt(chapterVerse[2], 10)
+    };
+  }
+  
+  return {
+    book: parts[0] || 'Unknown',
+    chapter: 1,
+    verse: 1
+  };
+}
+
 interface SessionViewProps {
   session: Session;
   isReadOnly: boolean;
@@ -159,16 +192,19 @@ export function SessionView({
           0.9
         );
 
-        const newReferences: ScriptureReference[] = (lastResult.matches || []).map((match: any) => ({
-          id: `ref-${Date.now()}-${Math.random()}`,
-          book: match.reference.split(' ')[0],
-          chapter: parseInt(match.reference.match(/\d+/)?.[0] || '1'),
-          verse: parseInt(match.reference.match(/:(\d+)/)?.[1] || '1'),
-          version: match.version || bibleVersion,
-          text: match.quote || '',
-          confidence: match.confidence || 0.5,
-          transcriptSegmentId: savedSegment.id
-        }));
+        const newReferences: ScriptureReference[] = (lastResult.matches || []).map((match: any) => {
+          const parsed = parseScriptureReference(match.reference);
+          return {
+            id: `ref-${Date.now()}-${Math.random()}`,
+            book: parsed.book,
+            chapter: parsed.chapter,
+            verse: parsed.verse,
+            version: match.version || bibleVersion,
+            text: match.quote || '',
+            confidence: match.confidence || 0.5,
+            transcriptSegmentId: savedSegment.id
+          };
+        });
 
         // Persist scripture references to backend
         for (const ref of newReferences) {
