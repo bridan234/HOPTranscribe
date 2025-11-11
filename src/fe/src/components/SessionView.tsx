@@ -317,7 +317,7 @@ export function SessionView({
     onUpdateSession(updatedSession);
     
     if (signalRService.isConnected()) {
-      await signalRService.broadcastSessionUpdate(session.sessionCode, {
+      await signalRService.broadcastSessionUpdate(updatedSession.sessionCode, {
         isRecording: false,
         isPaused: true
       });
@@ -461,11 +461,41 @@ export function SessionView({
     });
   };
 
+  const handleBack = async () => {
+    const wasRecording = session.isRecording;
+
+    if (wasRecording || connectionState !== CONNECTION_STATES.DISCONNECTED) {
+      disconnect();
+    }
+
+    if (mediaIsRecording) {
+      stopMedia();
+    }
+
+    if (wasRecording) {
+      const updatedSession = {
+        ...session,
+        isRecording: false,
+        isPaused: true
+      };
+      onUpdateSession(updatedSession);
+
+      if (signalRService.isConnected()) {
+        await signalRService.broadcastSessionUpdate(session.sessionCode, {
+          isRecording: false,
+          isPaused: true
+        });
+      }
+    }
+
+    onBack();
+  };
+
   return (
     <div className="h-screen flex flex-col">
       <div className="bg-background border-b border-border px-3 sm:px-4 py-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 mb-3">
-          <Button variant="ghost" onClick={onBack} className="gap-2 text-sm">
+          <Button variant="ghost" onClick={handleBack} className="gap-2 text-sm">
             <ArrowLeft className="w-4 h-4" />
             <span className="hidden sm:inline">Back to Sessions</span>
             <span className="sm:hidden">Back</span>
