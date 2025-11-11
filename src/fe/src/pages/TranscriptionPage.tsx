@@ -34,6 +34,7 @@ export default function TranscriptionPage({
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [newSessionDialogOpen, setNewSessionDialogOpen] = useState(false);
   const [joinSessionDialogOpen, setJoinSessionDialogOpen] = useState(false);
+  const [createSessionApiErrors, setCreateSessionApiErrors] = useState<{ userName?: string[]; title?: string[] }>({});
 
   useEffect(() => {
     loadSessions();
@@ -52,6 +53,7 @@ export default function TranscriptionPage({
 
   const handleCreateSession = async (userName: string, title: string) => {
     try {
+      setCreateSessionApiErrors({});
       localStorage.setItem('hoptranscribe_username', userName);
       const newSession = await sessionService.createSession(userName, title);
       setActiveSession(newSession);
@@ -60,9 +62,24 @@ export default function TranscriptionPage({
       setNewSessionDialogOpen(false);
       await loadSessions();
       toast.success(`Session created! ID: ${newSession.sessionCode}`);
-    } catch (error) {
+    } catch (error: any) {
       loggingService.error('Error creating session', 'TranscriptionPage', error as Error);
-      toast.error('Failed to create session');
+      
+      if (error.status === 400 && error.data?.errors) {
+        const apiErrors: { userName?: string[]; title?: string[] } = {};
+      
+        if (error.data.errors.UserName) {
+          apiErrors.userName = error.data.errors.UserName;
+        }
+        if (error.data.errors.Title) {
+          apiErrors.title = error.data.errors.Title;
+        }
+        
+        setCreateSessionApiErrors(apiErrors);
+      } else {
+        toast.error('Failed to create session');
+        setNewSessionDialogOpen(false);
+      }
     }
   };
 
@@ -193,8 +210,14 @@ export default function TranscriptionPage({
 
       <CreateSessionDialog
         open={newSessionDialogOpen}
-        onOpenChange={setNewSessionDialogOpen}
+        onOpenChange={(open) => {
+          setNewSessionDialogOpen(open);
+          if (!open) {
+            setCreateSessionApiErrors({}); // Clear errors when dialog closes
+          }
+        }}
         onCreateSession={handleCreateSession}
+        apiErrors={createSessionApiErrors}
       />
       
       <JoinSessionDialog

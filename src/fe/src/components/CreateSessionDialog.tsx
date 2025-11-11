@@ -15,9 +15,10 @@ interface CreateSessionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreateSession: (userName: string, title: string) => void;
+  apiErrors?: { userName?: string[]; title?: string[] };
 }
 
-export function CreateSessionDialog({ open, onOpenChange, onCreateSession }: CreateSessionDialogProps) {
+export function CreateSessionDialog({ open, onOpenChange, onCreateSession, apiErrors }: CreateSessionDialogProps) {
   const [userName, setUserName] = useState('');
   const [title, setTitle] = useState('');
   const [errors, setErrors] = useState<{ userName?: string; title?: string }>({});
@@ -52,6 +53,11 @@ export function CreateSessionDialog({ open, onOpenChange, onCreateSession }: Cre
     setErrors({});
     onOpenChange(false);
   };
+  
+  const displayErrors = {
+    userName: errors.userName || apiErrors?.userName?.[0],
+    title: errors.title || apiErrors?.title?.[0],
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -77,10 +83,10 @@ export function CreateSessionDialog({ open, onOpenChange, onCreateSession }: Cre
                     setErrors({ ...errors, userName: undefined });
                   }
                 }}
-                className={errors.userName ? 'border-red-500' : ''}
+                className={displayErrors.userName ? 'border-red-500' : ''}
               />
-              {errors.userName && (
-                <p className="text-sm text-red-500">{errors.userName}</p>
+              {displayErrors.userName && (
+                <p className="text-sm text-red-500">{displayErrors.userName}</p>
               )}
             </div>
             
@@ -96,10 +102,10 @@ export function CreateSessionDialog({ open, onOpenChange, onCreateSession }: Cre
                     setErrors({ ...errors, title: undefined });
                   }
                 }}
-                className={errors.title ? 'border-red-500' : ''}
+                className={displayErrors.title ? 'border-red-500' : ''}
               />
-              {errors.title && (
-                <p className="text-sm text-red-500">{errors.title}</p>
+              {displayErrors.title && (
+                <p className="text-sm text-red-500">{displayErrors.title}</p>
               )}
             </div>
           </div>
