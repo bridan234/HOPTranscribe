@@ -24,6 +24,7 @@ interface ScriptureReferencesProps {
   isRecording: boolean;
   preferredVersion: string;
   onReferenceHover: (segmentId: string | null) => void;
+  onReferenceClick?: (segmentId: string) => void;
   highlightedSegment: string | null;
 }
 
@@ -32,21 +33,15 @@ export function ScriptureReferences({
   isRecording, 
   preferredVersion,
   onReferenceHover,
+  onReferenceClick,
   highlightedSegment 
 }: ScriptureReferencesProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedSegments, setExpandedSegments] = useState<Set<string>>(new Set());
-  const highlightedRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to highlighted segment when it changes
-  useEffect(() => {
-    if (highlightedSegment && highlightedRef.current) {
-      highlightedRef.current.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'center'
-      });
-    }
-  }, [highlightedSegment]);
+  const handleReferenceClick = (segmentId: string) => {
+    onReferenceClick?.(segmentId);
+  };
 
   const handleCopyReference = async (reference: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -142,14 +137,15 @@ export function ScriptureReferences({
               return (
                 <div 
                   key={segment.segmentId}
-                  ref={isHighlighted ? highlightedRef : null}
-                  className={`group relative rounded-2xl border transition-all duration-300 ${
+                  id={`scripture-${segment.segmentId}`}
+                  className={`group relative rounded-2xl border transition-all duration-300 cursor-pointer ${
                     isHighlighted
                       ? 'border-[#123458] bg-gradient-to-br from-[#D4C9BE]/40 to-[#F1EFEC] dark:from-[#123458]/60 dark:to-[#2a3f5c] shadow-xl shadow-[#123458]/20 scale-[1.02]'
                       : 'border-border bg-card/80 backdrop-blur-sm hover:border-[#D4C9BE] hover:shadow-lg hover:shadow-[#123458]/10'
                   }`}
                   onMouseEnter={() => onReferenceHover(segment.segmentId)}
                   onMouseLeave={() => onReferenceHover(null)}
+                  onClick={() => handleReferenceClick(segment.segmentId)}
                 >
                   <div className="p-6">
                     {/* References for this segment */}

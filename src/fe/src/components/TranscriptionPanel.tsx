@@ -23,6 +23,9 @@ export function TranscriptionPanel({
   onSegmentHover,
   onSegmentClick
 }: TranscriptionPanelProps) {
+  // If you plan to scroll to segments in the future, you can keep this ref.
+  // const segmentElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-background via-background to-[#D4C9BE]/10">
       {/* Modern Header */}
@@ -64,6 +67,11 @@ export function TranscriptionPanel({
                 return (
                   <div 
                     key={segment.id}
+                    id={`transcript-${segment.id}`}
+                    // ref callback for future scroll-to-segment functionality
+                    // ref={(el) => {
+                    //   if (el) segmentElementsRef.current.set(segment.id, el); else segmentElementsRef.current.delete(segment.id);
+                    // }}
                     className={`group relative rounded-xl border transition-all duration-300 cursor-pointer ${
                       isHighlighted
                         ? 'border-[#123458] bg-gradient-to-br from-[#D4C9BE]/40 to-[#F1EFEC] dark:from-[#123458]/60 dark:to-[#2a3f5c] shadow-lg shadow-[#123458]/20 scale-[1.02]'

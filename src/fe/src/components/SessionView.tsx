@@ -443,6 +443,13 @@ export function SessionView({
     };
   }).filter(seg => seg.references.length > 0);
 
+  const scrollToElement = (elementId: string, prefix: string) => {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`${prefix}${elementId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
   return (
     <div className="h-screen flex flex-col">
       <div className="bg-background border-b border-border px-3 sm:px-4 py-3">
@@ -538,6 +545,10 @@ export function SessionView({
                 preferredVersion={bibleVersion}
                 highlightedSegment={highlightedSegment}
                 onReferenceHover={(segmentId) => setHighlightedSegment(segmentId)}
+                onReferenceClick={(segmentId) => {
+                  setHighlightedSegment(segmentId);
+                  scrollToElement(segmentId, 'transcript-');
+                }}
               />
             </ResizablePanel>
             
@@ -549,7 +560,10 @@ export function SessionView({
                 isRecording={session.isRecording}
                 highlightedSegment={highlightedSegment}
                 onSegmentHover={setHighlightedSegment}
-                onSegmentClick={setHighlightedSegment}
+                onSegmentClick={(segmentId) => {
+                  setHighlightedSegment(segmentId);
+                  scrollToElement(segmentId, 'scripture-');
+                }}
               />
             </ResizablePanel>
           </ResizablePanelGroup>
@@ -562,7 +576,10 @@ export function SessionView({
               isRecording={session.isRecording}
               highlightedSegment={highlightedSegment}
               onSegmentHover={setHighlightedSegment}
-              onSegmentClick={setHighlightedSegment}
+              onSegmentClick={(segmentId) => {
+                setHighlightedSegment(segmentId);
+                scrollToElement(segmentId, 'scripture-');
+              }}
             />
           </div>
           <div className="h-1/2 overflow-hidden">
@@ -572,6 +589,13 @@ export function SessionView({
               preferredVersion={bibleVersion}
               highlightedSegment={highlightedSegment}
               onReferenceHover={(segmentId) => setHighlightedSegment(segmentId)}
+              onReferenceClick={(segmentId) => {
+                setHighlightedSegment(segmentId);
+                requestAnimationFrame(() => {
+                  const el = document.getElementById(`transcript-${segmentId}`);
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+              }}
             />
           </div>
         </div>
