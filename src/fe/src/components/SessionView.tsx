@@ -101,9 +101,10 @@ export function SessionView({
     maxReferences,
   });
 
+  const lastPersistedTranscriptRef = useRef<string>("");
+
   useEffect(() => {
     let cancelled = false;
-    // Connect once per sessionCode; avoid disconnect on status changes to prevent message gaps
     signalRService.connect(session.sessionCode)
       .then(() => {
         if (!cancelled) setIsSignalRConnected(true);
@@ -124,13 +125,11 @@ export function SessionView({
 
     const handleReceiveBundle = (bundle: { transcript: TranscriptSegment; references: ScriptureReference[] }) => {
       const currentSession = sessionRef.current;
-      // Dedupe transcript
       const hasTranscript = (currentSession.transcripts || []).some(t => t.id === bundle.transcript.id);
       const newTranscripts = hasTranscript
         ? currentSession.transcripts || []
         : [...(currentSession.transcripts || []), bundle.transcript];
 
-      // Dedupe references
       const existingRefs = currentSession.scriptureReferences || [];
       const toAdd = bundle.references.filter(r => !existingRefs.some(er => er.id === r.id));
       const newRefs = [...existingRefs, ...toAdd];
@@ -160,7 +159,6 @@ export function SessionView({
     signalRService.onUserLeft(handleUserLeft);
     signalRService.onReceiveSessionUpdate(handleReceiveSessionUpdate);
 
-    // Cleanup: Remove handlers when component unmounts or connection changes
     return () => {
       signalRService.offReceiveTranscriptBundle(handleReceiveBundle);
       signalRService.offUserJoined(handleUserJoined);
@@ -183,16 +181,33 @@ export function SessionView({
 
   useEffect(() => {
     if (isReadOnly || !lastResult || !lastResult.transcript) return;
-    
-    const processTranscription = async () => {
+
+    const text = lastResult.transcript.trim();
+    if (!text) return;
+
+    if (text === lastPersistedTranscriptRef.current) return;
+
+    const hasMatches = Array.isArray((lastResult as any).matches) && (lastResult as any).matches.length > 0;
+    const endsSentence = /[\.!?]$/.test(text);
+    const lengthDelta = Math.abs(text.length - lastPersistedTranscriptRef.current.length);
+    const forceLengthFlush = lengthDelta > 40;
+
+    if (!(hasMatches || endsSentence || forceLengthFlush)) {
+      return;
+    }
+
+    const persist = async () => {
       try {
         const savedSegment = await sessionService.addTranscript(
-          session.sessionCode, 
-          lastResult.transcript, 
+          session.sessionCode,
+          text,
           0.9
         );
 
-        const newReferences: ScriptureReference[] = (lastResult.matches || []).map((match: any) => {
+        lastPersistedTranscriptRef.current = text;
+
+        const matches: any[] = (lastResult as any).matches || [];
+        const newReferences: ScriptureReference[] = matches.map((match: any) => {
           const parsed = parseScriptureReference(match.reference);
           return {
             id: `ref-${Date.now()}-${Math.random()}`,
@@ -206,7 +221,6 @@ export function SessionView({
           };
         });
 
-        // Persist scripture references to backend
         for (const ref of newReferences) {
           try {
             await sessionService.addScripture(session.sessionCode, {
@@ -244,8 +258,8 @@ export function SessionView({
       }
     };
 
-    processTranscription();
-  }, [isReadOnly, lastResult, session.sessionCode, bibleVersion]);
+    persist();
+  }, [isReadOnly, lastResult, session.sessionCode, bibleVersion, session, onUpdateSession]);
 
   useEffect(() => {
     if (mediaError) {
@@ -269,11 +283,9 @@ export function SessionView({
 
   const handleStartRecording = async () => {
     try {
-      // Connect SignalR before starting recording and wait for it
       if (!isSignalRConnected) {
         await signalRService.connect(session.sessionCode);
         setIsSignalRConnected(true);
-        // Small delay to ensure SignalR handlers are registered
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       
@@ -316,7 +328,6 @@ export function SessionView({
 
   const handleResumeRecording = async () => {
     try {
-      // Reconnect SignalR when resuming
       if (!isSignalRConnected) {
         await signalRService.connect(session.sessionCode);
         setIsSignalRConnected(true);

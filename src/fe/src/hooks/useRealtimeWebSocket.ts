@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiService } from '../services/apiService';
 import { websocketService } from '../services/websocketService';
-import { loggingService } from '../services/loggingService';
+import { loggingService as logger } from '../services/loggingService';
 import { repairJson } from '../utils/jsonRepair';
 import type { ConnectionState } from '../types/webrtc';
 import { 
@@ -14,6 +14,7 @@ import {
   SESSION_CONFIG,
   CONTENT_TYPES,
   ITEM_ROLES,
+  TURN_DETECTION_DEFAULTS,
 } from '../constants/openaiConstants';
 import { API_CONSTANTS } from '../constants/apiConstants';
 
@@ -59,11 +60,19 @@ export function useRealtimeWebSocket({
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
   const isResponseInProgress = useRef(false);
-  const lastResponseRequestTime = useRef<number>(0);
+  const outgoingFrameBufferRef = useRef<Int16Array[]>([]);
+  const lastAppendTimeRef = useRef<number>(0);
+  const segmentStartTimeRef = useRef<number | null>(null);
+  const latestTranscriptLatencyLoggedForRef = useRef<string>('');
+  const TARGET_FRAME_DURATION_MS = 40;
+  const TARGET_SAMPLES = (API_CONSTANTS.AUDIO.SAMPLE_RATE * TARGET_FRAME_DURATION_MS) / 1000;
+  const lastThroughputLogRef = useRef<number>(0);
+  const sentSamplesSinceLogRef = useRef<number>(0);
 
   const handleMessage = useCallback((event: any) => {
     switch (event.type) {
       case OPENAI_EVENT_TYPES.SESSION_CREATED:
+        logger.info?.('Realtime: session.created received', 'WebSocket');
         if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
           const sessionUpdate = {
             type: OPENAI_CLIENT_EVENTS.SESSION_UPDATE,
@@ -71,25 +80,47 @@ export function useRealtimeWebSocket({
               type: SESSION_CONFIG.TYPE,
               instructions: getSessionInstructions(preferredBibleVersion, primaryLanguage),
               tools: getOpenAITools(maxReferences),
-              tool_choice: SESSION_CONFIG.TOOL_CHOICE_AUTO
+              tool_choice: SESSION_CONFIG.TOOL_CHOICE_AUTO,
+              ...(TURN_DETECTION_DEFAULTS.ENABLED ? {
+                audio: {
+                  input: {
+                    format: { type: 'audio/pcm', rate: API_CONSTANTS.AUDIO.SAMPLE_RATE },
+                    turn_detection: {
+                      type: 'server_vad',
+                      threshold: TURN_DETECTION_DEFAULTS.THRESHOLD,
+                      silence_duration_ms: TURN_DETECTION_DEFAULTS.SILENCE_DURATION_MS,
+                      prefix_padding_ms: TURN_DETECTION_DEFAULTS.PREFIX_PADDING_MS,
+                      create_response: true,
+                      interrupt_response: false,
+                    }
+                  },
+                  output: {
+                    format: { type: 'audio/pcm', rate: API_CONSTANTS.AUDIO.SAMPLE_RATE }
+                  }
+                }
+              } : {})
             },
           };
           websocketService.sendEvent(websocketRef.current, sessionUpdate);
+          logger.info?.('Realtime: session.update sent (initial with VAD)', 'WebSocket');
         }
         break;
 
       case OPENAI_EVENT_TYPES.SESSION_UPDATED:
         break;
 
+      case OPENAI_EVENT_TYPES.INPUT_AUDIO_BUFFER_SPEECH_STARTED:
+        segmentStartTimeRef.current = Date.now();
+        break;
       case OPENAI_EVENT_TYPES.INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
-        if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-          const now = Date.now();
-
-          if (!isResponseInProgress.current) {
-            lastResponseRequestTime.current = now;
-            websocketService.sendEvent(websocketRef.current, {
-              type: OPENAI_CLIENT_EVENTS.RESPONSE_CREATE
-            });
+        break;
+      case OPENAI_EVENT_TYPES.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
+        if (typeof event.transcript === 'string' && event.transcript.length > 0) {
+          setLastResult({ transcript: event.transcript, matches: [] } as any);
+          if (segmentStartTimeRef.current && latestTranscriptLatencyLoggedForRef.current !== event.transcript) {
+            const latency = Date.now() - segmentStartTimeRef.current;
+            latestTranscriptLatencyLoggedForRef.current = event.transcript;
+            logger.info?.(`Latency(ms): initial transcript ${latency}`, 'StreamingLatency');
           }
         }
         break;
@@ -117,65 +148,6 @@ export function useRealtimeWebSocket({
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_OUTPUT_ITEM_DONE:
-        if (event.item?.type === CONTENT_TYPES.MESSAGE && event.item?.content) {
-          const textContent = Array.isArray(event.item.content) 
-            ? event.item.content.find((c: any) => c.type === CONTENT_TYPES.OUTPUT_TEXT)
-            : event.item.content.type === CONTENT_TYPES.OUTPUT_TEXT ? event.item.content : null;
-          
-          if (textContent?.text) {
-            // Process asynchronously to not block recording
-            (async () => {
-              try {
-                let jsonText = textContent.text;
-                let args;
-                
-                try {
-                  args = JSON.parse(jsonText);
-                } catch (parseError) {
-                  const repairedJson = repairJson(jsonText);
-                  
-                  if (repairedJson) {
-                    try {
-                      args = JSON.parse(repairedJson);
-                    } catch (repairParseError) {
-                      loggingService.error('Failed to parse even after repair', 'Scripture', repairParseError as Error);
-                      return;
-                    }
-                  } else {
-                    return;
-                  }
-                }
-                
-                if (args.transcript && args.matches) {
-                  const transcript = args.transcript;
-                  const matches = Array.isArray(args.matches) ? args.matches : [];
-                  
-                  const validMatches = matches.filter((match: any) => {
-                    const hasReference = typeof match.reference === 'string' && match.reference.trim().length > 0;
-                    const hasConfidence = typeof match.confidence === 'number' && match.confidence >= minConfidence;
-                    return hasReference && hasConfidence;
-                  });
-                  
-                  if (validMatches.length > 0) {
-                    const rankedMatches = validMatches.slice(0, maxReferences).map((match: any) => ({
-                      reference: match.reference,
-                      quote: typeof match.quote === 'string' ? match.quote : '',
-                      version: typeof match.version === 'string' ? match.version : preferredBibleVersion,
-                      confidence: match.confidence,
-                    }));
-                    
-                    setLastResult({
-                      transcript: transcript,
-                      matches: rankedMatches,
-                    } as any);
-                  }
-                }
-              } catch (err) {
-                loggingService.error('Failed to process function arguments', 'Scripture', err as Error);
-              }
-            })();
-          }
-        }
         break;
 
       case OPENAI_EVENT_TYPES.RESPONSE_AUDIO_DELTA:
@@ -193,7 +165,7 @@ export function useRealtimeWebSocket({
               playAudioQueue();
             }
           } catch (err) {
-            loggingService.error('Failed to decode audio delta', 'Audio', err as Error);
+            logger.error('Failed to decode audio delta', 'Audio', err as Error);
           }
         }
         break;
@@ -227,7 +199,6 @@ export function useRealtimeWebSocket({
             }
 
             let args;
-            let jsonToParse = trimmedArgs;
             
             try {
               args = JSON.parse(jsonToParse);
@@ -238,7 +209,7 @@ export function useRealtimeWebSocket({
                 try {
                   args = JSON.parse(repairedJson);
                 } catch (repairParseError) {
-                  loggingService.error('Failed to parse even after repair', 'Scripture', repairParseError as Error);
+                  logger.error('Failed to parse even after repair', 'Scripture', repairParseError as Error);
                   return;
                 }
               } else {
@@ -266,12 +237,14 @@ export function useRealtimeWebSocket({
               confidence: match.confidence,
             }));
             
-            setLastResult({
-              transcript: transcript || lastTranscriptRef.current,
-              matches: rankedMatches,
-            } as any);
+            setLastResult({ transcript: transcript || lastTranscriptRef.current, matches: rankedMatches } as any);
+            if (segmentStartTimeRef.current) {
+              const funcLatency = Date.now() - segmentStartTimeRef.current;
+              logger.info?.(`Latency(ms): function call matches ${funcLatency}`, 'StreamingLatency');
+              segmentStartTimeRef.current = null;
+            }
           } catch (err) {
-            loggingService.error('Failed to process function arguments', 'Scripture', err as Error);
+            logger.error('Failed to process function arguments', 'Scripture', err as Error);
           }
         })();
         break;
@@ -280,9 +253,16 @@ export function useRealtimeWebSocket({
         isResponseInProgress.current = false;
         break;
 
-      case OPENAI_EVENT_TYPES.ERROR:
+      case OPENAI_EVENT_TYPES.ERROR: {
         isResponseInProgress.current = false;
+        const errMsg = event?.error?.message || JSON.stringify(event?.error || {});
+        const errCode = event?.error?.code;
+        if (errCode === 'conversation_already_has_active_response') {
+          isResponseInProgress.current = true;
+        }
+        logger.error(`Realtime: error event received${errCode ? ` [${errCode}]` : ''} - ${errMsg}`, 'WebSocket', undefined, event);
         break;
+      }
     }
   }, [preferredBibleVersion, primaryLanguage, maxReferences, minConfidence]);
 
@@ -305,7 +285,6 @@ export function useRealtimeWebSocket({
         const audioBuffer = ctx.createBuffer(API_CONSTANTS.AUDIO.CHANNELS, chunk.length, API_CONSTANTS.AUDIO.SAMPLE_RATE);
         const channelData = audioBuffer.getChannelData(0);
         
-        // Convert Int16 to Float32
         for (let i = 0; i < chunk.length; i++) {
           channelData[i] = chunk[i] / 32768.0;
         }
@@ -315,13 +294,12 @@ export function useRealtimeWebSocket({
         source.connect(ctx.destination);
         source.start();
 
-        // Wait for this chunk to finish
         await new Promise(resolve => {
           source.onended = resolve;
         });
       }
     } catch (err) {
-      loggingService.error('Playback error', 'Audio', err as Error);
+      logger.error('Playback error', 'Audio', err as Error);
     } finally {
       isPlayingRef.current = false;
     }
@@ -334,25 +312,50 @@ export function useRealtimeWebSocket({
       audioContextRef.current = new AudioContext({ sampleRate: API_CONSTANTS.AUDIO.SAMPLE_RATE });
       
       await audioContextRef.current.audioWorklet.addModule('/audio-processor.js');
+      logger.info?.('AudioWorklet: module loaded at /audio-processor.js', 'Audio');
       const source = audioContextRef.current.createMediaStreamSource(stream);
       const workletNode = new AudioWorkletNode(audioContextRef.current, 'audio-capture-processor');
       
       workletNode.port.onmessage = (event) => {
-        if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-          const int16Array = event.data;
-          const bytes = new Uint8Array(int16Array.buffer);
-          const binaryString = String.fromCharCode(...bytes);
-          const base64 = btoa(binaryString);
-
-          websocketService.sendAudio(websocketRef.current, base64);
+        const int16Array: Int16Array = event.data;
+        outgoingFrameBufferRef.current.push(int16Array);
+        const bufferedSamples = outgoingFrameBufferRef.current.reduce((acc, arr) => acc + arr.length, 0);
+        const now = Date.now();
+        
+        if (segmentStartTimeRef.current === null) {
+          segmentStartTimeRef.current = now;
+        }
+        
+        sentSamplesSinceLogRef.current += int16Array.length;
+        if (!lastThroughputLogRef.current || now - lastThroughputLogRef.current > 1000) {
+          lastThroughputLogRef.current = now;
+          sentSamplesSinceLogRef.current = 0;
+        }
+        
+        const shouldFlush = bufferedSamples >= TARGET_SAMPLES || (lastAppendTimeRef.current && now - lastAppendTimeRef.current > 100);
+        if (shouldFlush) {
+          const merged = new Int16Array(bufferedSamples);
+          let offset = 0;
+          outgoingFrameBufferRef.current.forEach(chunk => {
+            merged.set(chunk, offset);
+            offset += chunk.length;
+          });
+          outgoingFrameBufferRef.current = [];
+          if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
+            const bytes = new Uint8Array(merged.buffer);
+            const binaryString = String.fromCharCode(...bytes);
+            const base64 = btoa(binaryString);
+            websocketService.sendAudio(websocketRef.current, base64);
+            lastAppendTimeRef.current = now;
+          }
         }
       };
 
       source.connect(workletNode);
-      workletNode.connect(audioContextRef.current.destination);
+      logger.info?.('AudioWorklet: capture pipeline started', 'Audio');
       
     } catch (err) {
-      loggingService.error('Failed to start streaming', 'Audio', err as Error);
+      logger.error('Failed to start streaming', 'Audio', err as Error);
     }
   }, [stream]);
 
@@ -385,16 +388,47 @@ export function useRealtimeWebSocket({
         onOpen: () => {
           setConnectionState(CONNECTION_STATES.CONNECTED);
           setIsConnecting(false);
+          logger.info?.('WebSocket: open', 'WebSocket');
+          if (TURN_DETECTION_DEFAULTS.ENABLED) {
+            websocketService.sendEvent(ws, {
+              type: OPENAI_CLIENT_EVENTS.SESSION_UPDATE,
+              session: {
+                type: SESSION_CONFIG.TYPE,
+                instructions: getSessionInstructions(preferredBibleVersion, primaryLanguage),
+                tools: getOpenAITools(maxReferences),
+                tool_choice: SESSION_CONFIG.TOOL_CHOICE_AUTO,
+                audio: {
+                  input: {
+                    format: { type: 'audio/pcm', rate: API_CONSTANTS.AUDIO.SAMPLE_RATE },
+                    turn_detection: {
+                      type: 'server_vad',
+                      threshold: TURN_DETECTION_DEFAULTS.THRESHOLD,
+                      silence_duration_ms: TURN_DETECTION_DEFAULTS.SILENCE_DURATION_MS,
+                      prefix_padding_ms: TURN_DETECTION_DEFAULTS.PREFIX_PADDING_MS,
+                      create_response: true,
+                      interrupt_response: false,
+                    }
+                  },
+                  output: {
+                    format: { type: 'audio/pcm', rate: API_CONSTANTS.AUDIO.SAMPLE_RATE }
+                  }
+                }
+              }
+            });
+            logger.info?.('Realtime: session.update sent on open (with VAD)', 'WebSocket');
+          }
           startAudioStreaming();
         },
         onClose: () => {
           setConnectionState(CONNECTION_STATES.DISCONNECTED);
           setIsConnecting(false);
+          logger.warn?.('WebSocket: close', 'WebSocket');
         },
-        onError: () => {
+        onError: (e) => {
           setError('WebSocket connection error');
           setConnectionState(CONNECTION_STATES.FAILED);
           setIsConnecting(false);
+          logger.error('WebSocket: error', 'WebSocket', undefined, e);
         }
       });
 
@@ -408,7 +442,6 @@ export function useRealtimeWebSocket({
   }, [stream, handleMessage, startAudioStreaming]);
 
   const disconnect = useCallback(() => {
-    
     if (websocketRef.current) {
       websocketService.closeConnection(websocketRef.current);
       websocketRef.current = null;
@@ -444,14 +477,12 @@ export function useRealtimeWebSocket({
     }
   }, []);
 
-  // Auto-connect when stream is available
   useEffect(() => {
     if (autoConnect && stream && connectionState === CONNECTION_STATES.DISCONNECTED && !isConnecting) {
       connect();
     }
   }, [autoConnect, stream, connectionState, isConnecting]);
 
-  // Update session when preferred Bible version changes
   useEffect(() => {
     if (connectionState === CONNECTION_STATES.CONNECTED && websocketRef.current) {
       const sessionUpdate = {
@@ -465,14 +496,12 @@ export function useRealtimeWebSocket({
     }
   }, [preferredBibleVersion, connectionState]);
 
-  // Disconnect when stream is removed
   useEffect(() => {
     if (!stream && connectionState === CONNECTION_STATES.CONNECTED) {
       disconnect();
     }
   }, [stream, connectionState]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       disconnect();

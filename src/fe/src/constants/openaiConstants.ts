@@ -60,6 +60,13 @@ export const SESSION_CONFIG = {
   TOOL_CHOICE_AUTO: 'auto',
 } as const;
 
+export const TURN_DETECTION_DEFAULTS = {
+  ENABLED: true,
+  THRESHOLD: 0.5,
+  SILENCE_DURATION_MS: 300,
+  PREFIX_PADDING_MS: 300,
+} as const;
+
 /**
  * OpenAI session instructions
  */
