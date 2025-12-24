@@ -118,9 +118,47 @@ try
         var dbContext = scope.ServiceProvider.GetService<SessionDbContext>();
         if (dbContext != null)
         {
-            Log.Information("Applying database migrations...");
-            dbContext.Database.Migrate();
-            Log.Information("Database migrations applied successfully");
+            try
+            {
+                Log.Information("Applying database migrations...");
+
+                // Test database connection first
+                var canConnect = dbContext.Database.CanConnect();
+                Log.Information("Database connection test: {CanConnect}", canConnect);
+
+                // Apply migrations with retry
+                var retryCount = 0;
+                var maxRetries = 3;
+                while (retryCount < maxRetries)
+                {
+                    try
+                    {
+                        dbContext.Database.Migrate();
+                        Log.Information("Database migrations applied successfully");
+                        break;
+                    }
+                    catch (Exception migrationEx)
+                    {
+                        retryCount++;
+                        if (retryCount >= maxRetries)
+                        {
+                            throw;
+                        }
+                        Log.Warning(migrationEx, "Migration attempt {RetryCount} failed, retrying...", retryCount);
+                        await Task.Delay(1000 * retryCount); // Exponential backoff
+                    }
+                }
+
+                // Verify database is accessible
+                var sessionCount = dbContext.Sessions.Count();
+                Log.Information("Database verified: {SessionCount} sessions exist", sessionCount);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "CRITICAL: Database migration failed! Database path: {ConnectionString}",
+                    dbContext.Database.GetConnectionString());
+                throw; // Re-throw to prevent app startup with broken database
+            }
         }
     }
 
