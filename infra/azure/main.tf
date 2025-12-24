@@ -154,7 +154,7 @@ resource "azurerm_container_app" "backend" {
 
       env {
         name  = "ASPNETCORE_ENVIRONMENT"
-        value = var.environment == "prod" ? "Production" : "Development"
+        value = "Production"  # Always use Production to enable database persistence
       }
 
       env {
