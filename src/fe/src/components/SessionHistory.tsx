@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Session } from '../models/Session';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Clock, Calendar, User, Search } from 'lucide-react';
 import { SESSION_STATUS } from '../constants/sessionConstants';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface SessionHistoryProps {
   sessions: Session[];
@@ -13,26 +14,39 @@ interface SessionHistoryProps {
 
 export function SessionHistory({ sessions, onOpenSession }: SessionHistoryProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const sortedSessions = [...sessions].sort((a, b) => 
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
+  const sortedSessions = [...sessions].sort((a, b) =>
     new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
   );
 
-  const filteredSessions = sortedSessions.filter(session => {
-    if (!searchQuery.trim()) return true;
-    
-    const query = searchQuery.toLowerCase();
-    return (
-      (session.title || '').toLowerCase().includes(query) ||
-      (session.userName || '').toLowerCase().includes(query) ||
-      (session.sessionCode || '').toLowerCase().includes(query) ||
-      (session.transcripts || []).some(t => (t.text || '').toLowerCase().includes(query)) ||
-      (session.scriptureReferences || []).some(ref => 
+  const filteredSessions = useMemo(() => {
+    if (!debouncedSearch.trim()) return sortedSessions;
+
+    const query = debouncedSearch.toLowerCase();
+
+    return sortedSessions.filter(session => {
+      // Check simple fields first (fastest)
+      if ((session.title || '').toLowerCase().includes(query)) return true;
+      if ((session.userName || '').toLowerCase().includes(query)) return true;
+      if ((session.sessionCode || '').toLowerCase().includes(query)) return true;
+
+      // Check scripture references (medium cost)
+      if ((session.scriptureReferences || []).some(ref =>
         (ref.book || '').toLowerCase().includes(query) ||
         (ref.text || '').toLowerCase().includes(query)
-      )
-    );
-  });
+      )) return true;
+
+      // Check transcripts last (most expensive) - limit search to first 50 transcripts
+      const transcripts = session.transcripts || [];
+      const maxTranscriptsToSearch = Math.min(transcripts.length, 50);
+      for (let i = 0; i < maxTranscriptsToSearch; i++) {
+        if ((transcripts[i].text || '').toLowerCase().includes(query)) return true;
+      }
+
+      return false;
+    });
+  }, [sortedSessions, debouncedSearch]);
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {
