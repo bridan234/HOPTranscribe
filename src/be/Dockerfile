@@ -16,6 +16,11 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0
 
 WORKDIR /app
 
+# Needed for container health checks
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
+
 # Copy published app from build stage
 COPY --from=build /app/publish .
 

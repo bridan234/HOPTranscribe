@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # be API
   be:
@@ -14,6 +12,7 @@ services:
       - OpenAI__ApiKey=${OPENAI_API_KEY}
       - OpenAI__TimeoutSeconds=30
       - OpenAI__Voice=alloy
+      - AllowedOrigins__0=http://localhost:3000
     volumes:
       - be-logs:/app/logs
       - be-data:/data
@@ -21,7 +20,7 @@ services:
       - hoptranscribe-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/health/status || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/status || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -44,7 +43,7 @@ services:
       - hoptranscribe-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1"]
       interval: 30s
       timeout: 10s
       retries: 3
