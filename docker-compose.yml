@@ -1,8 +1,8 @@
 version: '3.8'
 
 services:
-  # Backend API
-  backend:
+  # be API
+  be:
     build:
       context: ./src/be
       dockerfile: Dockerfile
@@ -15,7 +15,8 @@ services:
       - OpenAI__TimeoutSeconds=30
       - OpenAI__Voice=alloy
     volumes:
-      - backend-logs:/app/logs
+      - be-logs:/app/logs
+      - be-data:/data
     networks:
       - hoptranscribe-network
     restart: unless-stopped
@@ -26,8 +27,8 @@ services:
       retries: 3
       start_period: 40s
 
-  # Frontend React App
-  frontend:
+  # fe React App
+  fe:
     build:
       context: ./src/fe
       dockerfile: Dockerfile
@@ -37,7 +38,7 @@ services:
     environment:
       - VITE_API_BASE_URL=http://localhost:5001
     depends_on:
-      backend:
+      be:
         condition: service_healthy
     networks:
       - hoptranscribe-network
@@ -54,5 +55,7 @@ networks:
     driver: bridge
 
 volumes:
-  backend-logs:
+  be-logs:
+    driver: local
+  be-data:
     driver: local

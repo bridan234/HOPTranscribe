@@ -159,7 +159,7 @@ resource "azurerm_container_app" "backend" {
 
       env {
         name  = "SessionStorage__ConnectionString"
-        value = "Data Source=/data/sessions.db;Cache=Shared;Mode=ReadWriteCreate;Journal Mode=Delete;Synchronous=Full;Pooling=False"
+        value = "Data Source=/data/sessions.db;Cache=Shared;Mode=ReadWriteCreate"
       }
 
       env {
