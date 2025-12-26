@@ -28,8 +28,8 @@ export function TranscriptionPanel({
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-background via-background to-[#D4C9BE]/10">
-      {/* Modern Header */}
-      <div className="px-6 py-6 border-b border-border backdrop-blur-sm bg-background/80">
+      {/* Modern Header - hidden on mobile since we have tabs */}
+      <div className="hidden md:block px-6 py-6 border-b border-border backdrop-blur-sm bg-background/80">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#5a5550] to-[#030303] flex items-center justify-center shadow-lg shadow-[#030303]/20">
             <MessageSquare className="w-5 h-5 text-white" />
