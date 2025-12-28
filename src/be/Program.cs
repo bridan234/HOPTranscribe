@@ -88,17 +88,20 @@ try
     }
     else
     {
-        var connectionString = builder.Configuration["SessionStorage:ConnectionString"] 
-            ?? "Data Source=/data/sessions.db;Cache=Shared;Mode=ReadWriteCreate";
+        // var connectionString = builder.Configuration["SessionStorage:ConnectionString"] 
+        //     ?? "Data Source=/data/sessions.db;Cache=Shared;Mode=ReadWriteCreate";
 
-        builder.Services.AddDbContext<SessionDbContext>(options =>
-        {
-            options.UseSqlite(connectionString);
-        });
+        // builder.Services.AddDbContext<SessionDbContext>(options =>
+        // {
+        //     options.UseSqlite(connectionString);
+        // });
 
-        builder.Services.AddScoped<ISessionService, DatabaseSessionService>();
-        Log.Information("Production: Using DatabaseSessionService with SQLite at {ConnectionString}", connectionString);
-    }
+        // builder.Services.AddScoped<ISessionService, DatabaseSessionService>();
+        // Log.Information("Production: Using DatabaseSessionService with SQLite at {ConnectionString}", connectionString);
+        
+        builder.Services.AddSingleton<ISessionService, InMemorySessionService>();
+        Log.Information("Development: Using InMemorySessionService");
+   }
 
     builder.Services.AddHttpClient<IOpenAIService, OpenAIService>(client =>
     {
