@@ -48,25 +48,12 @@ try
         {
             if (builder.Environment.IsProduction())
             {
-                var allowedOriginsSet = new HashSet<string>(allowedOrigins, StringComparer.OrdinalIgnoreCase);
-
                 policy.SetIsOriginAllowed(origin =>
                       {
-                          if (string.IsNullOrWhiteSpace(origin))
-                          {
-                              return false;
-                          }
-
-                          if (allowedOriginsSet.Contains(origin))
-                          {
-                              return true;
-                          }
-
                           if (Uri.TryCreate(origin, UriKind.Absolute, out var uri))
                           {
                               return uri.Host.EndsWith(".azurecontainerapps.io", StringComparison.OrdinalIgnoreCase);
                           }
-
                           return false;
                       })
                       .AllowAnyMethod()
