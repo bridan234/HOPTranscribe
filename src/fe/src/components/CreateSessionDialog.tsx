@@ -10,15 +10,17 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Loader2 } from 'lucide-react';
 
 interface CreateSessionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreateSession: (userName: string, title: string) => void;
   apiErrors?: { userName?: string[]; title?: string[] };
+  isLoading?: boolean;
 }
 
-export function CreateSessionDialog({ open, onOpenChange, onCreateSession, apiErrors }: CreateSessionDialogProps) {
+export function CreateSessionDialog({ open, onOpenChange, onCreateSession, apiErrors, isLoading = false }: CreateSessionDialogProps) {
   const [userName, setUserName] = useState('');
   const [title, setTitle] = useState('');
   const [errors, setErrors] = useState<{ userName?: string; title?: string }>({});
@@ -111,10 +113,19 @@ export function CreateSessionDialog({ open, onOpenChange, onCreateSession, apiEr
           </div>
           
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleCancel}>
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={isLoading}>
               Cancel
             </Button>
-            <Button type="submit">Create Session</Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Create Session'
+              )}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

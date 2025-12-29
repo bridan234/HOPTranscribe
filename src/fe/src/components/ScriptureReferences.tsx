@@ -101,8 +101,8 @@ export function ScriptureReferences({
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-background via-background to-[#D4C9BE]/20">
-      {/* Modern Header */}
-      <div className="px-8 py-6 border-b border-border backdrop-blur-sm bg-background/80">
+      {/* Modern Header - hidden on mobile since we have tabs */}
+      <div className="hidden md:block px-8 py-6 border-b border-border backdrop-blur-sm bg-background/80">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#123458] to-[#2a5080] flex items-center justify-center shadow-lg shadow-[#123458]/30">
@@ -115,8 +115,8 @@ export function ScriptureReferences({
               </p>
             </div>
           </div>
-          <Badge 
-            variant="secondary" 
+          <Badge
+            variant="secondary"
             className="ml-2 bg-gradient-to-r from-[#123458] to-[#2a5080] text-white border-0 shadow-md px-4 py-2"
           >
             {totalReferences} {totalReferences === 1 ? 'reference' : 'references'}
@@ -126,7 +126,7 @@ export function ScriptureReferences({
 
       {/* References List */}
       <ScrollArea className="flex-1 h-0">
-        <div className="p-6 space-y-4">
+        <div className="p-3 md:p-6 space-y-3 md:space-y-4">
           {segmentRefs.length > 0 ? (
             [...segmentRefs].reverse().map((segment) => {
               const displayRefs = getDisplayReferences(segment.references, segment.segmentId);
@@ -147,7 +147,7 @@ export function ScriptureReferences({
                   onMouseLeave={() => onReferenceHover(null)}
                   onClick={() => handleReferenceClick(segment.segmentId)}
                 >
-                  <div className="p-6">
+                  <div className="p-4 md:p-6">
                     {/* References for this segment */}
                     <div className="space-y-5">
                       {displayRefs.map((ref, index) => (
@@ -161,8 +161,8 @@ export function ScriptureReferences({
                                 onClick={(e) => handleCopyReference(ref.reference, e)}
                                 className="text-foreground hover:text-[#123458] dark:hover:text-[#D4C9BE] transition-colors group/ref flex items-center gap-2"
                               >
-                                <span className="text-lg">{ref.reference}</span>
-                                <Copy className="w-4 h-4 opacity-0 group-hover/ref:opacity-100 transition-opacity" />
+                                <span className="text-base md:text-lg font-medium">{ref.reference}</span>
+                                <Copy className="w-4 h-4 opacity-50 md:opacity-0 group-hover/ref:opacity-100 transition-opacity" />
                               </button>
                               <div className="flex items-center gap-2">
                                 <Badge 

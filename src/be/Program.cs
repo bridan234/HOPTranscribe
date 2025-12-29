@@ -54,25 +54,12 @@ try
         {
             if (builder.Environment.IsProduction())
             {
-                var allowedOriginsSet = new HashSet<string>(allowedOrigins, StringComparer.OrdinalIgnoreCase);
-
                 policy.SetIsOriginAllowed(origin =>
                       {
-                          if (string.IsNullOrWhiteSpace(origin))
-                          {
-                              return false;
-                          }
-
-                          if (allowedOriginsSet.Contains(origin))
-                          {
-                              return true;
-                          }
-
                           if (Uri.TryCreate(origin, UriKind.Absolute, out var uri))
                           {
                               return uri.Host.EndsWith(".azurecontainerapps.io", StringComparison.OrdinalIgnoreCase);
                           }
-
                           return false;
                       })
                       .AllowAnyMethod()
@@ -108,17 +95,20 @@ try
     }
     else
     {
-        var connectionString = builder.Configuration["SessionStorage:ConnectionString"] 
-            ?? "Data Source=/data/sessions.db;Cache=Shared;Mode=ReadWriteCreate";
+        // var connectionString = builder.Configuration["SessionStorage:ConnectionString"] 
+        //     ?? "Data Source=/data/sessions.db;Cache=Shared;Mode=ReadWriteCreate";
 
-        builder.Services.AddDbContext<SessionDbContext>(options =>
-        {
-            options.UseSqlite(connectionString);
-        });
+        // builder.Services.AddDbContext<SessionDbContext>(options =>
+        // {
+        //     options.UseSqlite(connectionString);
+        // });
 
-        builder.Services.AddScoped<ISessionService, DatabaseSessionService>();
-        Log.Information("Production: Using DatabaseSessionService with SQLite at {ConnectionString}", connectionString);
-    }
+        // builder.Services.AddScoped<ISessionService, DatabaseSessionService>();
+        // Log.Information("Production: Using DatabaseSessionService with SQLite at {ConnectionString}", connectionString);
+        
+        builder.Services.AddSingleton<ISessionService, InMemorySessionService>();
+        Log.Information("Development: Using InMemorySessionService");
+   }
 
     builder.Services.AddHttpClient<IOpenAIService, OpenAIService>(client =>
     {

@@ -11,15 +11,16 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Alert, AlertDescription } from './ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 interface JoinSessionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onJoinSession: (sessionId: string) => void;
+  isLoading?: boolean;
 }
 
-export function JoinSessionDialog({ open, onOpenChange, onJoinSession }: JoinSessionDialogProps) {
+export function JoinSessionDialog({ open, onOpenChange, onJoinSession, isLoading = false }: JoinSessionDialogProps) {
   const [sessionId, setSessionId] = useState('');
   const [error, setError] = useState('');
 
@@ -79,10 +80,19 @@ export function JoinSessionDialog({ open, onOpenChange, onJoinSession }: JoinSes
           </div>
           
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleCancel}>
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={isLoading}>
               Cancel
             </Button>
-            <Button type="submit">Join Session</Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Joining...
+                </>
+              ) : (
+                'Join Session'
+              )}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

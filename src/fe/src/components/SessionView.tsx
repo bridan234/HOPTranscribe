@@ -4,7 +4,7 @@ import { RecordingControls } from './RecordingControls';
 import { ScriptureReferences } from './ScriptureReferences';
 import { TranscriptionPanel } from './TranscriptionPanel';
 import { Button } from './ui/button';
-import { ArrowLeft, Copy, Users } from 'lucide-react';
+import { ArrowLeft, Copy, Users, MessageSquare, BookOpen } from 'lucide-react';
 import { Card } from './ui/card';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from './ui/resizable';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
@@ -83,6 +83,8 @@ export function SessionView({
   const [collaboratorCount, setCollaboratorCount] = useState(0);
   const [isSignalRConnected, setIsSignalRConnected] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState<string | null>(null);
+  const [mobileTab, setMobileTab] = useState<'transcripts' | 'references'>('transcripts');
+  const [filteredSegmentId, setFilteredSegmentId] = useState<string | null>(null);
   const sessionRef = useRef(session);
   const onUpdateSessionRef = useRef(onUpdateSession);
   
@@ -625,34 +627,101 @@ export function SessionView({
         </div>
 
         <div className="flex flex-col h-full md:hidden">
-          <div className="h-1/2 overflow-hidden border-b border-border">
-            <TranscriptionPanel
-              segments={transcriptionSegments}
-              isRecording={session.isRecording}
-              highlightedSegment={highlightedSegment}
-              onSegmentHover={setHighlightedSegment}
-              onSegmentClick={(segmentId) => {
-                setHighlightedSegment(segmentId);
-                scrollToElement(segmentId, 'scripture-');
+          {/* Mobile Tab Bar */}
+          <div className="flex border-b border-border bg-background shrink-0">
+            <button
+              onClick={() => setMobileTab('transcripts')}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium transition-colors relative ${
+                mobileTab === 'transcripts'
+                  ? 'text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Transcripts</span>
+              {transcriptionSegments.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1.5 text-xs">
+                  {transcriptionSegments.length}
+                </Badge>
+              )}
+              {mobileTab === 'transcripts' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
+            <button
+              onClick={() => {
+                setMobileTab('references');
+                setFilteredSegmentId(null);
               }}
-              interimTranscript={interimTranscript}
-            />
+              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium transition-colors relative ${
+                mobileTab === 'references'
+                  ? 'text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>References</span>
+              {segmentRefs.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1.5 text-xs">
+                  {segmentRefs.reduce((acc, seg) => acc + seg.references.length, 0)}
+                </Badge>
+              )}
+              {mobileTab === 'references' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
           </div>
-          <div className="h-1/2 overflow-hidden">
-            <ScriptureReferences
-              segmentRefs={segmentRefs}
-              isRecording={session.isRecording}
-              preferredVersion={bibleVersion}
-              highlightedSegment={highlightedSegment}
-              onReferenceHover={(segmentId) => setHighlightedSegment(segmentId)}
-              onReferenceClick={(segmentId) => {
-                setHighlightedSegment(segmentId);
-                requestAnimationFrame(() => {
-                  const el = document.getElementById(`transcript-${segmentId}`);
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                });
-              }}
-            />
+
+          {/* Mobile Tab Content */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {mobileTab === 'transcripts' ? (
+              <TranscriptionPanel
+                segments={transcriptionSegments}
+                isRecording={session.isRecording}
+                highlightedSegment={highlightedSegment}
+                onSegmentHover={setHighlightedSegment}
+                onSegmentClick={(segmentId) => {
+                  setHighlightedSegment(segmentId);
+                  setFilteredSegmentId(segmentId);
+                  setMobileTab('references');
+                }}
+              />
+            ) : (
+              <>
+                {/* Filter header when viewing specific transcript's references */}
+                {filteredSegmentId && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border shrink-0">
+                    <span className="text-sm text-muted-foreground">
+                      Showing references for selected transcript
+                    </span>
+                    <button
+                      onClick={() => setFilteredSegmentId(null)}
+                      className="text-sm text-primary font-medium hover:underline"
+                    >
+                      View all
+                    </button>
+                  </div>
+                )}
+                <div className="flex-1 overflow-hidden">
+                  <ScriptureReferences
+                    segmentRefs={filteredSegmentId
+                      ? segmentRefs.filter(seg => seg.segmentId === filteredSegmentId)
+                      : segmentRefs
+                    }
+                    isRecording={session.isRecording}
+                    preferredVersion={bibleVersion}
+                    highlightedSegment={highlightedSegment}
+                    onReferenceHover={(segmentId) => setHighlightedSegment(segmentId)}
+                    onReferenceClick={(segmentId) => {
+                      setHighlightedSegment(segmentId);
+                      setFilteredSegmentId(null);
+                      setMobileTab('transcripts');
+                      setTimeout(() => scrollToElement(segmentId, 'transcript-'), 100);
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
