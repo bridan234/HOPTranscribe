@@ -164,6 +164,7 @@ jobs:
         az containerapp update \
           --name hoptranscribe-api \
           --resource-group $RESOURCE_GROUP \
+          --container-name backend \
           --image docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hoptranscribe-backend:latest
         
         # Update frontend container app to trigger new revision with latest image
@@ -171,6 +172,7 @@ jobs:
         az containerapp update \
           --name hoptranscribe-web \
           --resource-group $RESOURCE_GROUP \
+          --container-name frontend \
           --image docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hoptranscribe-frontend:latest
         
         echo "✅ Container Apps updated to pull latest images"
