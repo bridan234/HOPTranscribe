@@ -27,6 +27,12 @@ try
     builder.Services.Configure<ApplicationSettings>(
         builder.Configuration.GetSection(nameof(ApplicationSettings))
     );
+    builder.Services.Configure<DeepgramSettings>(
+        builder.Configuration.GetSection("Deepgram")
+    );
+    builder.Services.Configure<OllamaSettings>(
+        builder.Configuration.GetSection("Ollama")
+    );
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
@@ -87,8 +93,9 @@ try
     builder.Services.AddSignalR(options =>
     {
         options.EnableDetailedErrors = !builder.Environment.IsProduction();
-        options.KeepAliveInterval = TimeSpan.FromSeconds(50);
-        options.ClientTimeoutInterval = TimeSpan.FromSeconds(120);
+        // KeepAliveInterval must be less than client's serverTimeoutInMilliseconds (default 30s)
+        options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
     });
 
     builder.Services.AddMemoryCache();
@@ -116,6 +123,16 @@ try
     builder.Services.AddHttpClient<IOpenAIService, OpenAIService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(30);
+    });
+
+    // Deepgram streaming transcription
+    builder.Services.AddSingleton<IDeepgramService, DeepgramService>();
+
+    // Ollama scripture detection
+    builder.Services.AddHttpClient<IOllamaService, OllamaService>(client =>
+    {
+        var ollamaSettings = builder.Configuration.GetSection("Ollama").Get<OllamaSettings>() ?? new OllamaSettings();
+        client.Timeout = TimeSpan.FromSeconds(ollamaSettings.TimeoutSeconds);
     });
 
     builder.Services.AddScoped<IClientLoggingService, ClientLoggingService>();
@@ -191,6 +208,7 @@ try
     app.UseHttpsRedirection();
     app.MapControllers();
     app.MapHub<SessionHub>("/sessionHub");
+    app.MapHub<AudioHub>("/audioHub");
 
     app.MapHealthChecks($"/{ApiConstants.Routes.HealthEndpoint}");
     app.MapGet($"/{ApiConstants.Routes.HealthEndpoint}/status", (IOptions<ApplicationSettings> appSettings) =>

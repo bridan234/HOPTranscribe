@@ -151,6 +151,44 @@ variable "openai_voice" {
   default     = "alloy"
 }
 
+# Deepgram Configuration
+variable "deepgram_api_key" {
+  description = "Deepgram API key for streaming transcription (sensitive)"
+  type        = string
+  sensitive   = true
+}
+
+variable "deepgram_model" {
+  description = "Deepgram model for transcription"
+  type        = string
+  default     = "nova-2"
+}
+
+variable "deepgram_language" {
+  description = "Deepgram language for transcription"
+  type        = string
+  default     = "en-US"
+}
+
+# Ollama Configuration (sidecar)
+variable "ollama_model" {
+  description = "Ollama model for scripture detection"
+  type        = string
+  default     = "gpt-oss:20b"
+}
+
+variable "ollama_cpu" {
+  description = "CPU cores for Ollama sidecar container"
+  type        = number
+  default     = 8.0
+}
+
+variable "ollama_memory" {
+  description = "Memory for Ollama sidecar container"
+  type        = string
+  default     = "24Gi"
+}
+
 # Storage Configuration
 variable "storage_account_replication" {
   description = "Storage account replication type (LRS, GRS, RAGRS, ZRS)"

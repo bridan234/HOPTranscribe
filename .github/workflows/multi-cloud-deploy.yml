@@ -129,6 +129,7 @@ jobs:
         terraform plan \
           -var="environment=${{ github.event.inputs.environment }}" \
           -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}" \
           -var="dockerhub_token=${{ secrets.DOCKERHUB_TOKEN }}" \
           -out=tfplan
       env:
@@ -277,6 +278,7 @@ jobs:
         terraform plan \
           -var="environment=${{ github.event.inputs.environment }}" \
           -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}" \
           -var="region=${{ secrets.AWS_REGION }}" \
           -out=tfplan
     
@@ -367,6 +369,7 @@ jobs:
           -var="environment=${{ github.event.inputs.environment }}" \
           -var="region=${{ secrets.GCP_REGION }}" \
           -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}" \
           -out=tfplan
     
     - name: Terraform Apply
@@ -424,6 +427,7 @@ jobs:
         terraform destroy -auto-approve \
           -var="environment=${{ github.event.inputs.environment }}" \
           -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}" \
           -var="dockerhub_token=${{ secrets.DOCKERHUB_TOKEN }}"
       env:
         ARM_ACCESS_KEY: ${{ secrets.ARM_ACCESS_KEY }}
@@ -465,7 +469,8 @@ jobs:
         terraform destroy -auto-approve \
           -var="environment=${{ github.event.inputs.environment }}" \
           -var="region=${{ secrets.AWS_REGION }}" \
-          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}"
 
   destroy-gcp:
     name: Destroy GCP Resources
@@ -499,7 +504,8 @@ jobs:
           -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
           -var="environment=${{ github.event.inputs.environment }}" \
           -var="region=${{ secrets.GCP_REGION }}" \
-          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}"
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="deepgram_api_key=${{ secrets.DEEPGRAM_API_KEY }}"
 
   # ============================================================
   # Deployment Summary

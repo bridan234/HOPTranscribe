@@ -14,6 +14,7 @@ interface TranscriptionPanelProps {
   highlightedSegment: string | null;
   onSegmentHover: (segmentId: string | null) => void;
   onSegmentClick?: (segmentId: string) => void;
+  interimTranscript?: string | null;
 }
 
 export function TranscriptionPanel({ 
@@ -21,7 +22,8 @@ export function TranscriptionPanel({
   isRecording,
   highlightedSegment,
   onSegmentHover,
-  onSegmentClick
+  onSegmentClick,
+  interimTranscript
 }: TranscriptionPanelProps) {
   // If you plan to scroll to segments in the future, you can keep this ref.
   // const segmentElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -46,7 +48,7 @@ export function TranscriptionPanel({
       {/* Transcription Content */}
       <ScrollArea className="flex-1 h-0">
         <div className="p-4 space-y-3">
-          {segments.length > 0 ? (
+          {segments.length > 0 || isRecording ? (
             <>
               {isRecording && (
                 <div className="rounded-xl border-2 border-dashed border-border bg-card/60 backdrop-blur-sm p-4">
@@ -56,7 +58,9 @@ export function TranscriptionPanel({
                       <span className="w-2 h-2 bg-[#123458] dark:bg-[#D4C9BE] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                       <span className="w-2 h-2 bg-[#123458] dark:bg-[#D4C9BE] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <span className="text-sm text-muted-foreground">Listening and transcribing...</span>
+                    <span className="text-sm text-muted-foreground">
+                      {interimTranscript || 'Listening and transcribing...'}
+                    </span>
                   </div>
                 </div>
               )}

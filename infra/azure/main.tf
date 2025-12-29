@@ -127,6 +127,11 @@ resource "azurerm_container_app" "backend" {
   }
 
   secret {
+    name  = "deepgram-api-key"
+    value = var.deepgram_api_key
+  }
+
+  secret {
     name  = "appinsights-connection-string"
     value = azurerm_application_insights.insights.connection_string
   }
@@ -182,6 +187,38 @@ resource "azurerm_container_app" "backend" {
         secret_name = "appinsights-connection-string"
       }
 
+      # Deepgram configuration
+      env {
+        name        = "Deepgram__ApiKey"
+        secret_name = "deepgram-api-key"
+      }
+
+      env {
+        name  = "Deepgram__Model"
+        value = var.deepgram_model
+      }
+
+      env {
+        name  = "Deepgram__Language"
+        value = var.deepgram_language
+      }
+
+      # Ollama configuration (points to sidecar)
+      env {
+        name  = "Ollama__BaseUrl"
+        value = "http://localhost:11434"
+      }
+
+      env {
+        name  = "Ollama__Model"
+        value = var.ollama_model
+      }
+
+      env {
+        name  = "Ollama__TimeoutSeconds"
+        value = "30"
+      }
+
       volume_mounts {
         name = "sessions-data"
         path = "/data"
@@ -197,6 +234,25 @@ resource "azurerm_container_app" "backend" {
         transport = "HTTP"
         port      = 8080
         path      = "/health/status"
+      }
+    }
+
+    # Ollama sidecar for local scripture detection
+    container {
+      name   = "ollama"
+      image  = "ollama/ollama:latest"
+      cpu    = var.ollama_cpu
+      memory = var.ollama_memory
+
+      # Pull the model on startup
+      command = ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${var.ollama_model} && wait"]
+
+      liveness_probe {
+        transport        = "HTTP"
+        port             = 11434
+        path             = "/"
+        initial_delay    = 30
+        interval_seconds = 30
       }
     }
   }

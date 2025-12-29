@@ -12,7 +12,7 @@ import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { copyToClipboard } from '../utils/clipboard';
 import { useMediaRecorder } from '../hooks/useMediaRecorder';
-import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
+import { useAudioStreaming } from '../hooks/useAudioStreaming';
 import { signalRService } from '../services/signalRService';
 import { sessionService } from '../services/sessionService';
 import { loggingService } from '../services/loggingService';
@@ -82,6 +82,7 @@ export function SessionView({
   const [hasConnected, setHasConnected] = useState(false);
   const [collaboratorCount, setCollaboratorCount] = useState(0);
   const [isSignalRConnected, setIsSignalRConnected] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState<string | null>(null);
   const sessionRef = useRef(session);
   const onUpdateSessionRef = useRef(onUpdateSession);
   
@@ -92,13 +93,11 @@ export function SessionView({
   
   const { stream, isRecording: mediaIsRecording, error: mediaError, startRecording: startMedia, stopRecording: stopMedia } = useMediaRecorder({ deviceId: selectedDevice !== 'default' ? selectedDevice : undefined });
   
-  const { connectionState, error: wsError, lastResult, connect, disconnect } = useRealtimeWebSocket({
+  const { connectionState, error: wsError, lastTranscript, lastScripture, connect, disconnect } = useAudioStreaming({
     stream,
+    sessionCode: session.sessionCode,
     autoConnect: false,
     preferredBibleVersion: bibleVersion,
-    primaryLanguage,
-    minConfidence: minConfidence / 100,
-    maxReferences,
   });
 
   const lastPersistedTranscriptRef = useRef<string>("");
@@ -179,79 +178,47 @@ export function SessionView({
     }
   }, [isReadOnly, shouldConnect, stream, connectionState, connect]);
 
+  // Handle incoming transcripts from Deepgram via SignalR
   useEffect(() => {
-    if (isReadOnly || !lastResult || !lastResult.transcript) return;
+    if (isReadOnly || !lastTranscript) return;
 
-    const text = lastResult.transcript.trim();
-    if (!text) return;
-
-    if (text === lastPersistedTranscriptRef.current) return;
-
-    const hasMatches = Array.isArray((lastResult as any).matches) && (lastResult as any).matches.length > 0;
-    const endsSentence = /[\.!?]$/.test(text);
-    const lengthDelta = Math.abs(text.length - lastPersistedTranscriptRef.current.length);
-    const forceLengthFlush = lengthDelta > 40;
-
-    if (!(hasMatches || endsSentence || forceLengthFlush)) {
+    if (!lastTranscript.isFinal) {
+      setInterimTranscript(lastTranscript.segment.text);
       return;
     }
 
+    setInterimTranscript(null);
+
+    const segment = lastTranscript.segment;
+    if (!segment.text?.trim()) return;
+
+    // Persist to backend and update local state
     const persist = async () => {
       try {
+        const currentSession = sessionRef.current;
         const savedSegment = await sessionService.addTranscript(
-          session.sessionCode,
-          text,
-          0.9
+          currentSession.sessionCode,
+          segment.text,
+          segment.confidence
         );
 
-        lastPersistedTranscriptRef.current = text;
+        lastPersistedTranscriptRef.current = segment.text;
 
-        const matches: any[] = (lastResult as any).matches || [];
-        const newReferences: ScriptureReference[] = matches.map((match: any) => {
-          const parsed = parseScriptureReference(match.reference);
-          return {
-            id: `ref-${Date.now()}-${Math.random()}`,
-            book: parsed.book,
-            chapter: parsed.chapter,
-            verse: parsed.verse,
-            version: match.version || bibleVersion,
-            text: match.quote || '',
-            confidence: match.confidence || 0.5,
-            transcriptSegmentId: savedSegment.id
-          };
-        });
-
-        for (const ref of newReferences) {
-          try {
-            await sessionService.addScripture(session.sessionCode, {
-              book: ref.book,
-              chapter: ref.chapter,
-              verse: ref.verse,
-              version: ref.version,
-              text: ref.text,
-              confidence: ref.confidence,
-              transcriptSegmentId: ref.transcriptSegmentId
-            });
-          } catch (err) {
-            loggingService.error('Failed to persist scripture reference to backend', 'SessionView', err as Error);
-          }
-        }
-
+        // Broadcast via SignalR for collaborators
         if (signalRService.isConnected()) {
           try {
-            await signalRService.broadcastTranscriptBundle(session.sessionCode, {
+            await signalRService.broadcastTranscriptBundle(currentSession.sessionCode, {
               transcript: savedSegment,
-              references: newReferences
+              references: []
             });
           } catch (err) {
             loggingService.warn('SignalR broadcast failed', 'SessionView', err as Error);
           }
         }
 
-        onUpdateSession({
-          ...session,
-          transcripts: [...(session.transcripts || []), savedSegment],
-          scriptureReferences: [...session.scriptureReferences, ...newReferences]
+        onUpdateSessionRef.current({
+          ...currentSession,
+          transcripts: [...(currentSession.transcripts || []), savedSegment]
         });
       } catch (err) {
         loggingService.error('Failed to persist transcript to backend', 'SessionView', err as Error);
@@ -259,7 +226,53 @@ export function SessionView({
     };
 
     persist();
-  }, [isReadOnly, lastResult, session.sessionCode, bibleVersion, session, onUpdateSession]);
+  }, [isReadOnly, lastTranscript]);
+
+  // Handle incoming scripture references from Ollama via SignalR
+  useEffect(() => {
+    if (isReadOnly || !lastScripture) return;
+
+    const persist = async () => {
+      try {
+        const currentSession = sessionRef.current;
+        await sessionService.addScripture(currentSession.sessionCode, {
+          book: lastScripture.book,
+          chapter: lastScripture.chapter,
+          verse: lastScripture.verse,
+          version: lastScripture.version,
+          text: lastScripture.text,
+          confidence: lastScripture.confidence,
+          transcriptSegmentId: lastScripture.transcriptSegmentId
+        });
+
+        // Broadcast via SignalR for collaborators
+        if (signalRService.isConnected()) {
+          try {
+            await signalRService.broadcastTranscriptBundle(currentSession.sessionCode, {
+              transcript: currentSession.transcripts?.[currentSession.transcripts.length - 1] || {
+                id: lastScripture.transcriptSegmentId,
+                text: '',
+                timestamp: new Date().toISOString(),
+                confidence: 0
+              },
+              references: [lastScripture]
+            });
+          } catch (err) {
+            loggingService.warn('SignalR broadcast failed', 'SessionView', err as Error);
+          }
+        }
+
+        onUpdateSessionRef.current({
+          ...currentSession,
+          scriptureReferences: [...(currentSession.scriptureReferences || []), lastScripture]
+        });
+      } catch (err) {
+        loggingService.error('Failed to persist scripture reference to backend', 'SessionView', err as Error);
+      }
+    };
+
+    persist();
+  }, [isReadOnly, lastScripture]);
 
   useEffect(() => {
     if (mediaError) {
@@ -605,6 +618,7 @@ export function SessionView({
                   setHighlightedSegment(segmentId);
                   scrollToElement(segmentId, 'scripture-');
                 }}
+                interimTranscript={interimTranscript}
               />
             </ResizablePanel>
           </ResizablePanelGroup>
@@ -621,6 +635,7 @@ export function SessionView({
                 setHighlightedSegment(segmentId);
                 scrollToElement(segmentId, 'scripture-');
               }}
+              interimTranscript={interimTranscript}
             />
           </div>
           <div className="h-1/2 overflow-hidden">
