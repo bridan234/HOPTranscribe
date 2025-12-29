@@ -104,7 +104,7 @@ resource "azurerm_container_app_environment" "env" {
   # D-series workload profile for Ollama (supports larger allocations)
   workload_profile {
     name                  = "ollama-profile"
-    workload_profile_type = "D4"  # 4 vCPU, 16 GB memory per instance
+    workload_profile_type = "D16"  # 16 vCPU, 64 GB memory per instance
     minimum_count         = 1
     maximum_count         = 3
   }
