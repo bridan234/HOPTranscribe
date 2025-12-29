@@ -88,12 +88,26 @@ resource "azurerm_user_assigned_identity" "backend" {
   tags = var.tags
 }
 
-# Container Apps Environment
+# Container Apps Environment with Workload Profiles (supports larger resources)
 resource "azurerm_container_app_environment" "env" {
   name                       = "${var.project_name}-${var.environment}-env"
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.logs.id
+  infrastructure_subnet_id   = null  # Optional: can add VNet integration
+
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
+
+  # D-series workload profile for Ollama (supports larger allocations)
+  workload_profile {
+    name                  = "ollama-profile"
+    workload_profile_type = "D4"  # 4 vCPU, 16 GB memory per instance
+    minimum_count         = 1
+    maximum_count         = 3
+  }
 
   tags = var.tags
 }
@@ -144,6 +158,9 @@ resource "azurerm_container_app" "backend" {
   template {
     min_replicas = var.backend_min_replicas
     max_replicas = var.backend_max_replicas
+
+    # Use dedicated workload profile for larger resource allocation
+    workload_profile_name = "ollama-profile"
 
     volume {
       name         = "sessions-data"
