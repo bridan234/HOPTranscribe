@@ -118,6 +118,7 @@ resource "azurerm_container_app" "backend" {
   container_app_environment_id = azurerm_container_app_environment.env.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "ollama-profile"
 
   identity {
     type         = "SystemAssigned, UserAssigned"
@@ -158,9 +159,6 @@ resource "azurerm_container_app" "backend" {
   template {
     min_replicas = var.backend_min_replicas
     max_replicas = var.backend_max_replicas
-
-    # Use dedicated workload profile for larger resource allocation
-    workload_profile_name = "ollama-profile"
 
     volume {
       name         = "sessions-data"
