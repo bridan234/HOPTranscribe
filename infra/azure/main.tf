@@ -294,7 +294,7 @@ resource "azurerm_container_app" "backend" {
         transport        = "HTTP"
         port             = 11434
         path             = "/"
-        initial_delay    = 300  # 5 min delay for model download
+        initial_delay    = 60  # Max allowed, model download may cause initial restarts
         interval_seconds = 30
       }
     }
