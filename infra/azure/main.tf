@@ -69,12 +69,29 @@ resource "azurerm_storage_share" "sessions_db" {
   quota                = var.sessions_db_quota_gb
 }
 
+# File Share for Ollama models (needs 20GB+ for gpt-oss:20b)
+resource "azurerm_storage_share" "ollama_models" {
+  name                 = "ollama-models"
+  storage_account_name = azurerm_storage_account.sessions.name
+  quota                = 30  # 30GB for model storage
+}
+
 # Container Apps Environment Storage - mounts the file share
 resource "azurerm_container_app_environment_storage" "sessions_storage" {
   name                         = "sessions-storage"
   container_app_environment_id = azurerm_container_app_environment.env.id
   account_name                 = azurerm_storage_account.sessions.name
   share_name                   = azurerm_storage_share.sessions_db.name
+  access_key                   = azurerm_storage_account.sessions.primary_access_key
+  access_mode                  = "ReadWrite"
+}
+
+# Container Apps Environment Storage for Ollama models
+resource "azurerm_container_app_environment_storage" "ollama_storage" {
+  name                         = "ollama-storage"
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  account_name                 = azurerm_storage_account.sessions.name
+  share_name                   = azurerm_storage_share.ollama_models.name
   access_key                   = azurerm_storage_account.sessions.primary_access_key
   access_mode                  = "ReadWrite"
 }
@@ -166,6 +183,12 @@ resource "azurerm_container_app" "backend" {
       storage_name = azurerm_container_app_environment_storage.sessions_storage.name
     }
 
+    volume {
+      name         = "ollama-models"
+      storage_type = "AzureFile"
+      storage_name = azurerm_container_app_environment_storage.ollama_storage.name
+    }
+
     container {
       name   = "backend"
       image  = "bridan/${var.backend_image_name}:latest"
@@ -246,9 +269,13 @@ resource "azurerm_container_app" "backend" {
       }
 
       readiness_probe {
-        transport = "HTTP"
-        port      = 8080
-        path      = "/health/status"
+        transport              = "HTTP"
+        port                   = 8080
+        path                   = "/health/status"
+        initial_delay_seconds  = 60
+        interval_seconds       = 10
+        timeout                = 5
+        failure_threshold      = 3
       }
     }
 
@@ -262,12 +289,27 @@ resource "azurerm_container_app" "backend" {
       # Pull the model on startup
       command = ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull ${var.ollama_model} && wait"]
 
+      volume_mounts {
+        name = "ollama-models"
+        path = "/root/.ollama"  # Ollama stores models here
+      }
+
+      startup_probe {
+        transport              = "HTTP"
+        port                   = 11434
+        path                   = "/"
+        initial_delay_seconds  = 60
+        period_seconds         = 30
+        timeout                = 10
+        failure_threshold      = 30  # 30 attempts * 30s = 15 min for model download
+      }
+
       liveness_probe {
-        transport        = "HTTP"
-        port             = 11434
-        path             = "/"
-        initial_delay    = 30
-        interval_seconds = 30
+        transport              = "HTTP"
+        port                   = 11434
+        path                   = "/"
+        interval_seconds       = 30
+        timeout                = 10
       }
     }
   }
