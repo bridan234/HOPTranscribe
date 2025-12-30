@@ -269,13 +269,9 @@ resource "azurerm_container_app" "backend" {
       }
 
       readiness_probe {
-        transport              = "HTTP"
-        port                   = 8080
-        path                   = "/health/status"
-        initial_delay_seconds  = 60
-        interval_seconds       = 10
-        timeout                = 5
-        failure_threshold      = 3
+        transport = "HTTP"
+        port      = 8080
+        path      = "/health/status"
       }
     }
 
@@ -294,22 +290,12 @@ resource "azurerm_container_app" "backend" {
         path = "/root/.ollama"  # Ollama stores models here
       }
 
-      startup_probe {
-        transport              = "HTTP"
-        port                   = 11434
-        path                   = "/"
-        initial_delay_seconds  = 60
-        period_seconds         = 30
-        timeout                = 10
-        failure_threshold      = 30  # 30 attempts * 30s = 15 min for model download
-      }
-
       liveness_probe {
-        transport              = "HTTP"
-        port                   = 11434
-        path                   = "/"
-        interval_seconds       = 30
-        timeout                = 10
+        transport        = "HTTP"
+        port             = 11434
+        path             = "/"
+        initial_delay    = 300  # 5 min delay for model download
+        interval_seconds = 30
       }
     }
   }
