@@ -5,10 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { RecordingControls } from './RecordingControls';
 import { TranscriptionPanel } from './TranscriptionPanel';
 import { ScriptureReferences } from './ScriptureReferences';
+import { SettingsPanel } from './SettingsPanel';
 import { useRealtimeWebRTC } from '@/hooks/useRealtimeWebRTC';
 import { useScriptureMatcher } from '@/hooks/useScriptureMatcher';
+import { useSessionHub } from '@/hooks/useSessionHub';
+import { useSettings } from '@/hooks/useSettings';
 import { sessionService } from '@/services/sessionService';
-import { DEFAULTS, STORAGE_KEYS } from '@/constants/apiConstants';
 import type { SessionDto, TranscriptSegmentDto } from '@/types/api';
 
 interface SessionViewProps {
@@ -17,17 +19,12 @@ interface SessionViewProps {
   onBack: () => void;
 }
 
-export function SessionView({ session, username, onBack }: SessionViewProps) {
+export function SessionView({ session: initialSession, username, onBack }: SessionViewProps) {
+  const { settings } = useSettings();
+  const [session, setSession] = useState<SessionDto>(initialSession);
   const isOwner = session.ownerUsername.toLowerCase() === username.toLowerCase();
   const [segments, setSegments] = useState<TranscriptSegmentDto[]>([]);
   const [partial, setPartial] = useState('');
-  const [preferredVersion] = useState<string>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEYS.preferredVersion) ?? DEFAULTS.preferredVersion;
-    } catch {
-      return DEFAULTS.preferredVersion;
-    }
-  });
 
   useEffect(() => {
     let cancelled = false;
@@ -46,10 +43,33 @@ export function SessionView({ session, username, onBack }: SessionViewProps) {
     };
   }, [session.code]);
 
+  const handleHubTranscript = useCallback(
+    (segment: TranscriptSegmentDto) => {
+      setSegments((prev) => {
+        if (prev.some((s) => s.id === segment.id)) return prev;
+        return [...prev, segment];
+      });
+    },
+    [],
+  );
+
+  const handleHubSession = useCallback((updated: SessionDto) => {
+    setSession(updated);
+  }, []);
+
+  // Viewers (non-owners) subscribe to live transcript broadcasts via SignalR.
+  // Owners don't need it because they already produce the events locally.
+  useSessionHub({
+    sessionCode: session.code,
+    enabled: !isOwner,
+    onTranscriptAppended: handleHubTranscript,
+    onSessionUpdated: handleHubSession,
+  });
+
   const { requestMatches, cancel: cancelMatches } = useScriptureMatcher({
     sessionCode: session.code,
-    preferredVersion,
-    n: DEFAULTS.matchCount,
+    preferredVersion: settings.preferredVersion,
+    n: settings.matchCount,
   });
 
   const handleUtterance = useCallback(
@@ -147,6 +167,7 @@ export function SessionView({ session, username, onBack }: SessionViewProps) {
               onStop={stop}
               isOwner={isOwner && session.status === 'active'}
             />
+            <SettingsPanel />
             <Button variant="ghost" size="sm" onClick={onBack}>
               Back
             </Button>
@@ -156,10 +177,18 @@ export function SessionView({ session, username, onBack }: SessionViewProps) {
 
       <main className="flex-1 container mx-auto px-4 py-4 grid gap-4 md:grid-cols-3">
         <div className="md:col-span-2 h-[70vh]">
-          <TranscriptionPanel segments={segments} partialText={partial} />
+          <TranscriptionPanel
+            segments={segments}
+            partialText={partial}
+            autoScroll={settings.autoScroll}
+          />
         </div>
         <div className="h-[70vh]">
-          <ScriptureReferences segments={segments} minConfidence={DEFAULTS.minConfidence} />
+          <ScriptureReferences
+            segments={segments}
+            showConfidence={settings.showConfidence}
+            minConfidence={settings.minConfidence}
+          />
         </div>
       </main>
     </div>

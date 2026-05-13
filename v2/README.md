@@ -4,7 +4,7 @@
 
 Real-time sermon transcription with AI-powered Bible scripture suggestions. Built with a split-stage realtime pipeline: dedicated streaming STT for speech and a separate text LLM for scripture matching.
 
-> Status: **planning / scaffolding**. This README is the source of truth for the v2 rewrite. The v1 implementation lives in `../src/` (will be archived to `../v1/` during Phase 0).
+> Status: **Phases 0–6 complete**. This README is the source of truth for the v2 rewrite. The v1 implementation has been archived to `../v1/`.
 
 ---
 
@@ -493,7 +493,7 @@ Indexes: `Sessions.Code` (unique), `Sessions.OwnerUsername`, `TranscriptSegments
 
 Each phase is independently demoable and gated by passing CI.
 
-### Phase 0 — Scaffold
+### Phase 0 — Scaffold ✅
 - Create `v2/` skeleton matching the [layout](#6-repository-layout).
 - Archive v1 (`git mv src/ v1/`, update root README pointer).
 - Initialize `HOPTranscribe.Api.csproj` (empty Program.cs, packages restored).
@@ -501,7 +501,7 @@ Each phase is independently demoable and gated by passing CI.
 - Stub `docker-compose.yml` for the new layout.
 - CI: `dotnet build` + `npm run build` green.
 
-### Phase 1 — Auth + sessions
+### Phase 1 — Auth + sessions ✅
 - `AuthController` (`/api/auth/claim`, `/api/auth/refresh`).
 - `JwtService` (HS256, configurable key + expiry).
 - `HopDbContext` + `SessionEntity` + initial migration.
@@ -510,13 +510,13 @@ Each phase is independently demoable and gated by passing CI.
 - Tests: xUnit (`AuthService`, `SessionService`, controllers).
 - Demo: claim username, create session, restart container, session still there.
 
-### Phase 2 — STT pipeline (WebRTC)
+### Phase 2 — STT pipeline (WebRTC) ✅
 - `OpenAIRealtimeService.CreateTranscriptionSessionAsync()` → calls OpenAI `/v1/realtime/transcription_sessions`.
 - `OpenAIController.CreateTranscriptionSession` (owner-only).
 - Frontend: `webrtcService.ts` (clean rewrite), `useRealtimeWebRTC` hook, `RecordingControls` + `TranscriptionPanel`.
 - Demo: speak → live transcript appears. No scripture yet.
 
-### Phase 3 — Matching service
+### Phase 3 — Matching service ✅
 - `ScriptureMatchService.GetMatchesAsync(utterance, preferredVersion, n)` → `gpt-5-mini` with `json_schema`.
 - `BibleBookCatalog` + `BibleVerseCounts.json` (embedded resource) + `ScriptureValidator`.
 - `MatchController` (`/api/match`) with rate limiter.
@@ -524,26 +524,26 @@ Each phase is independently demoable and gated by passing CI.
 - Fallback model logic + retry policy.
 - Demo: `curl /api/match` with a sample utterance → returns validated matches.
 
-### Phase 4 — Wire end-to-end
+### Phase 4 — Wire end-to-end ✅
 - `useScriptureMatcher` hook (debounced, calls `/api/match` on utterance finalization).
 - `ScriptureReferences` component (cards with reference, version, quote, confidence).
 - `SessionService.AppendTranscriptAsync(sessionCode, segment, matches)`.
 - Demo: speak "For God so loved the world" → see John 3:16 card.
 
-### Phase 5 — Collaboration
-- `SessionHub` with `[Authorize]`, owner-only broadcast methods.
-- `useSignalR` hook on viewer side (joins group, listens for events).
-- Read-only view for non-owners.
-- Tests: hub integration test (two clients, owner sends, viewer receives).
-- Demo: two browsers, one speaks, both see transcript + scripture in sync.
+### Phase 5 — Collaboration ✅
+- `SessionHub` at `/sessionHub` with `[Authorize]` and `?access_token=` query auth (for WebSockets).
+- `ISessionBroadcaster` server-side broker fires `TranscriptAppended` / `SessionUpdated` on REST writes.
+- Frontend `signalRService` + `useSessionHub` hook with `withAutomaticReconnect` backoff schedule.
+- Viewers (non-owners) auto-subscribe; owners skip the hub (already source of truth).
+- Demo: two browsers — owner speaks, viewer sees transcripts + scripture in sync.
 
-### Phase 6 — Polish + hardening
-- `ExceptionHandlingMiddleware`, `RequestLoggingMiddleware`.
-- Frontend error boundaries, toast notifications, reconnect with backoff.
-- Settings panel (preferred version, max references, min confidence, auto-scroll).
-- App Insights wired when connection string present.
-- Production logging (Serilog file rotation).
-- Load tests: 5 concurrent sessions, sustained 10 min.
+### Phase 6 — Polish + hardening ✅
+- Frontend `ErrorBoundary` wrapping the app shell.
+- `SettingsProvider` + `SettingsPanel` dialog (preferred version, min confidence, auto-scroll, confidence badges) persisted to `localStorage`.
+- WebRTC realtime hook now auto-reconnects with exponential backoff (1s/3s/9s, up to 3 attempts) on unexpected close/error.
+- App Insights wired when `APPLICATIONINSIGHTS_CONNECTION_STRING` is present.
+- Serilog file rotation enabled in production.
+- TODO: load tests (5 concurrent sessions, sustained 10 min) deferred to deploy phase.
 
 ### Phase 7 — Azure deploy
 - `infra/azure/main.tf` — Container Apps environment, ACR, Log Analytics, Application Insights, persistent volume for SQLite (or migrate to Azure SQL/Postgres if v2.x).

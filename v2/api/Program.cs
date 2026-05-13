@@ -2,8 +2,10 @@ using System.Text;
 using System.Threading.RateLimiting;
 using HOPTranscribe.Api.Configuration;
 using HOPTranscribe.Api.Data;
+using HOPTranscribe.Api.Hubs;
 using HOPTranscribe.Api.Middleware;
 using HOPTranscribe.Api.Services.Auth;
+using HOPTranscribe.Api.Services.Broadcast;
 using HOPTranscribe.Api.Services.Matching;
 using HOPTranscribe.Api.Services.OpenAI;
 using HOPTranscribe.Api.Services.Sessions;
@@ -33,8 +35,14 @@ builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddSingleton<BibleBookCatalog>();
 builder.Services.AddScoped<ScriptureValidator>();
 builder.Services.AddScoped<ISessionService, SqliteSessionService>();
+builder.Services.AddSingleton<ISessionBroadcaster, SignalRSessionBroadcaster>();
 builder.Services.AddHttpClient<IOpenAIRealtimeService, OpenAIRealtimeService>();
 builder.Services.AddHttpClient<IScriptureMatchService, ScriptureMatchService>();
+
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+});
 
 var rateLimits = builder.Configuration.GetSection("RateLimits").Get<RateLimitSettings>() ?? new RateLimitSettings();
 builder.Services.AddRateLimiter(options =>
@@ -74,6 +82,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     ? new string('0', 32)
                     : jwtSection.SigningKey)),
             ClockSkew = TimeSpan.FromSeconds(30),
+        };
+        // SignalR WebSockets cannot send the Authorization header — accept ?access_token=...
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/sessionHub"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 builder.Services.AddAuthorization();
@@ -155,6 +177,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
+app.MapHub<SessionHub>("/sessionHub");
 app.MapHealthChecks("/health/status");
 app.MapGet("/", () => Results.Ok(new { service = "HOPTranscribe.Api", version = "v2.0.0" }));
 

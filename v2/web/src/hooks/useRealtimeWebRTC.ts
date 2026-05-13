@@ -13,15 +13,24 @@ interface UseRealtimeWebRTCOptions {
   onUtterance?: (utterance: RealtimeUtterance) => void;
   onDelta?: (delta: RealtimeDelta) => void;
   onError?: (error: Error) => void;
+  onReconnect?: (attempt: number) => void;
+  maxRetries?: number;
 }
 
+const RETRY_DELAYS_MS = [1000, 3000, 9000];
+
 export function useRealtimeWebRTC(opts: UseRealtimeWebRTCOptions = {}) {
-  const { onUtterance, onDelta, onError } = opts;
+  const { onUtterance, onDelta, onError, onReconnect, maxRetries = RETRY_DELAYS_MS.length } = opts;
 
   const [state, setState] = useState<RealtimeConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const startedAtRef = useRef<string>('');
+  const sessionCodeRef = useRef<string>('');
+  const deviceIdRef = useRef<string | undefined>(undefined);
+  const userStoppedRef = useRef<boolean>(false);
+  const retryCountRef = useRef<number>(0);
+  const retryTimerRef = useRef<number | null>(null);
 
   const handleMessage = useCallback(
     (event: unknown) => {
@@ -34,6 +43,7 @@ export function useRealtimeWebRTC(opts: UseRealtimeWebRTCOptions = {}) {
         case 'transcription_session.updated':
           setState('recording');
           startedAtRef.current = new Date().toISOString();
+          retryCountRef.current = 0;
           break;
         case 'conversation.item.input_audio_transcription.delta':
           if (data.delta) {
@@ -66,47 +76,92 @@ export function useRealtimeWebRTC(opts: UseRealtimeWebRTCOptions = {}) {
     [onDelta, onUtterance, onError],
   );
 
-  const start = useCallback(
-    async (sessionCode: string, deviceId?: string) => {
-      if (connectionRef.current) {
+  const attemptConnect = useCallback(async () => {
+    const sessionCode = sessionCodeRef.current;
+    if (!sessionCode || connectionRef.current) return;
+
+    setState('connecting');
+    setError(null);
+    try {
+      const session = await apiClient.post<TranscriptionSessionResponse>(
+        API_ENDPOINTS.openai.transcriptionSession,
+        { sessionCode },
+      );
+
+      const conn = await connectRealtime({
+        session,
+        deviceId: deviceIdRef.current,
+        onOpen: () => setState('connected'),
+        onClose: () => {
+          connectionRef.current = null;
+          if (userStoppedRef.current) {
+            setState('idle');
+          } else {
+            // Connection died unexpectedly — try to come back
+            scheduleRetry('connection closed');
+          }
+        },
+        onError: (err) => {
+          setError(err.message);
+          setState('error');
+          onError?.(err);
+          if (!userStoppedRef.current) {
+            scheduleRetry(err.message);
+          }
+        },
+        onMessage: handleMessage,
+      });
+      connectionRef.current = conn;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      setState('error');
+      onError?.(err instanceof Error ? err : new Error(message));
+      if (!userStoppedRef.current) {
+        scheduleRetry(message);
+      }
+    }
+    // scheduleRetry is hoisted below in the closure
+    function scheduleRetry(reason: string) {
+      if (retryCountRef.current >= maxRetries) {
+        console.warn(`Realtime retries exhausted (${reason})`);
         return;
       }
-      setState('connecting');
-      setError(null);
-      try {
-        const session = await apiClient.post<TranscriptionSessionResponse>(
-          API_ENDPOINTS.openai.transcriptionSession,
-          { sessionCode },
-        );
+      const attempt = retryCountRef.current + 1;
+      const delay = RETRY_DELAYS_MS[Math.min(retryCountRef.current, RETRY_DELAYS_MS.length - 1)];
+      retryCountRef.current = attempt;
+      onReconnect?.(attempt);
+      console.info(`Realtime reconnect attempt ${attempt}/${maxRetries} in ${delay}ms (${reason})`);
+      if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = window.setTimeout(() => {
+        retryTimerRef.current = null;
+        void attemptConnect();
+      }, delay);
+    }
+  }, [handleMessage, maxRetries, onError, onReconnect]);
 
-        const conn = await connectRealtime({
-          session,
-          deviceId,
-          onOpen: () => setState('connected'),
-          onClose: () => {
-            connectionRef.current = null;
-            setState('idle');
-          },
-          onError: (err) => {
-            setError(err.message);
-            setState('error');
-            onError?.(err);
-          },
-          onMessage: handleMessage,
-        });
-        connectionRef.current = conn;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message);
-        setState('error');
-        onError?.(err instanceof Error ? err : new Error(message));
-      }
+  const start = useCallback(
+    async (sessionCode: string, deviceId?: string) => {
+      if (connectionRef.current) return;
+      sessionCodeRef.current = sessionCode;
+      deviceIdRef.current = deviceId;
+      userStoppedRef.current = false;
+      retryCountRef.current = 0;
+      await attemptConnect();
     },
-    [handleMessage, onError],
+    [attemptConnect],
   );
 
   const stop = useCallback(async () => {
-    if (!connectionRef.current) return;
+    userStoppedRef.current = true;
+    if (retryTimerRef.current) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    if (!connectionRef.current) {
+      setState('idle');
+      return;
+    }
     setState('closing');
     try {
       await connectionRef.current.close();

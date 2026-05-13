@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using HOPTranscribe.Api.Models.Common;
 using HOPTranscribe.Api.Models.Sessions;
+using HOPTranscribe.Api.Services.Broadcast;
 using HOPTranscribe.Api.Services.Sessions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,11 +14,16 @@ namespace HOPTranscribe.Api.Controllers;
 public class SessionController : ControllerBase
 {
     private readonly ISessionService _sessions;
+    private readonly ISessionBroadcaster _broadcaster;
     private readonly ILogger<SessionController> _logger;
 
-    public SessionController(ISessionService sessions, ILogger<SessionController> logger)
+    public SessionController(
+        ISessionService sessions,
+        ISessionBroadcaster broadcaster,
+        ILogger<SessionController> logger)
     {
         _sessions = sessions;
+        _broadcaster = broadcaster;
         _logger = logger;
     }
 
@@ -59,6 +65,7 @@ public class SessionController : ControllerBase
         {
             var dto = await _sessions.EndAsync(code, CurrentUser, ct);
             if (dto is null) return NotFound(ApiResponse<SessionDto>.Fail("Session not found."));
+            await _broadcaster.SessionUpdatedAsync(code, dto);
             return Ok(ApiResponse<SessionDto>.Ok(dto));
         }
         catch (UnauthorizedAccessException ex)
@@ -98,6 +105,7 @@ public class SessionController : ControllerBase
         _logger.LogInformation(
             "Appended segment {SegmentId} to session {Code} with {Count} matches",
             segment.Id, code, segment.Matches.Count);
+        await _broadcaster.TranscriptAppendedAsync(code, segment);
         return Ok(ApiResponse<TranscriptSegmentDto>.Ok(segment));
     }
 
