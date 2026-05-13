@@ -545,15 +545,18 @@ Each phase is independently demoable and gated by passing CI.
 - Serilog file rotation enabled in production.
 - TODO: load tests (5 concurrent sessions, sustained 10 min) deferred to deploy phase.
 
-### Phase 7 — Azure deploy ✅ (Terraform)
+### Phase 7 — Azure deploy ✅ (Terraform + GitHub Actions)
 - `infra/azure/` — single Terraform root for the Azure target:
   - Resource group, Log Analytics + workspace-based App Insights
   - ACR (Basic), user-assigned managed identity with `AcrPull` + `Key Vault Secrets User`
   - Key Vault with `openai-api-key` and `jwt-signing-key` (versionless references)
   - Storage account + Azure Files share mounted at `/data` for SQLite
   - Container Apps environment + API + web container apps, both with KV-backed secrets and Container App secret references
-- See [`infra/azure/README.md`](./infra/azure/README.md) for deploy steps (build → push → apply, or apply targeted ACR first).
-- TODO: GitHub Actions workflow (build → push → apply → smoke test) — not yet implemented.
+- GitHub Actions in `.github/workflows/`:
+  - `v2-ci.yml` — build verification (API, web, Docker, terraform validate) on PR/push to `v2`
+  - `v2-deploy.yml` — OIDC-authenticated build → push → `az containerapp update` roll on `v2/api/**` or `v2/web/**`
+  - `v2-infra.yml` — manual `terraform plan/apply/destroy` against an azurerm backend (auto-injected via `backend_override.tf`)
+- See [`infra/azure/README.md`](./infra/azure/README.md) for deploy steps and [`docs/CICD.md`](./docs/CICD.md) for the OIDC federation + secrets/vars setup.
 
 ## 12. Local development (target)
 
