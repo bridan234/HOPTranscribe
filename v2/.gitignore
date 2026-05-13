@@ -1,0 +1,28 @@
+# .NET
+api/bin/
+api/obj/
+api/logs/
+api/data/
+**/*.user
+**/*.suo
+
+# Node / Vite
+web/node_modules/
+web/dist/
+web/.vite/
+web/**/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vs/
+.idea/
+*.swp

@@ -1,0 +1,1271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HOPTranscribe v2 - Rewrite Plan</title>
+  <meta name="description" content="HOPTranscribe v2 rewrite plan: realtime sermon transcription with AI-powered scripture suggestions.">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --bg-2: #0b1628;
+      --panel: rgba(15, 25, 45, 0.78);
+      --panel-strong: rgba(20, 32, 56, 0.94);
+      --panel-soft: rgba(34, 52, 88, 0.42);
+      --border: rgba(148, 163, 184, 0.22);
+      --border-strong: rgba(125, 211, 252, 0.42);
+      --text: #e5eefb;
+      --muted: #a8b3c7;
+      --muted-2: #7f8da3;
+      --brand: #60a5fa;
+      --brand-2: #22d3ee;
+      --accent: #a78bfa;
+      --good: #34d399;
+      --warn: #fbbf24;
+      --danger: #fb7185;
+      --code: #0a1020;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      --radius: 22px;
+      --radius-sm: 14px;
+      --content: 1160px;
+      --sidebar: 300px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(96, 165, 250, 0.22), transparent 34rem),
+        radial-gradient(circle at 80% 10%, rgba(167, 139, 250, 0.18), transparent 32rem),
+        radial-gradient(circle at 30% 80%, rgba(34, 211, 238, 0.12), transparent 28rem),
+        linear-gradient(135deg, var(--bg), var(--bg-2));
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    code,
+    pre {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      gap: 28px;
+      width: min(100% - 32px, calc(var(--content) + var(--sidebar) + 28px));
+      margin: 0 auto;
+      padding: 28px 0 80px;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(8, 16, 31, 0.72);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .sidebar h2 {
+      margin: 0 0 12px;
+      font-size: 0.8rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted-2);
+    }
+
+    .nav-list {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .nav-list a {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 10px;
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+
+    .nav-list a:hover,
+    .nav-list a.active {
+      color: var(--text);
+      background: rgba(96, 165, 250, 0.12);
+      transform: translateX(2px);
+    }
+
+    .nav-index {
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--brand-2);
+      font-size: 0.72rem;
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(28px, 6vw, 68px);
+      border: 1px solid var(--border);
+      border-radius: 32px;
+      background:
+        linear-gradient(135deg, rgba(96, 165, 250, 0.16), rgba(167, 139, 250, 0.12)),
+        rgba(12, 23, 42, 0.76);
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -10% -45% 28%;
+      height: 260px;
+      background: radial-gradient(circle, rgba(34, 211, 238, 0.28), transparent 68%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      margin: 0 0 18px;
+      padding: 8px 12px;
+      border: 1px solid rgba(34, 211, 238, 0.32);
+      border-radius: 999px;
+      background: rgba(34, 211, 238, 0.08);
+      color: #b8f3ff;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hero h1 {
+      max-width: 780px;
+      margin: 0;
+      font-size: clamp(2.5rem, 7vw, 5rem);
+      line-height: 0.96;
+      letter-spacing: -0.075em;
+    }
+
+    .hero p {
+      max-width: 790px;
+      margin: 22px 0 0;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 2vw, 1.28rem);
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 30px;
+    }
+
+    .meta-card,
+    .stat-card,
+    .feature-card,
+    .phase-card,
+    .cost-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--panel);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(14px);
+    }
+
+    .meta-card {
+      padding: 14px;
+    }
+
+    .meta-card span,
+    .stat-card span,
+    .cost-card span {
+      display: block;
+      color: var(--muted-2);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .meta-card strong,
+    .stat-card strong,
+    .cost-card strong {
+      display: block;
+      margin-top: 6px;
+      color: var(--text);
+      font-size: 1.05rem;
+    }
+
+    section {
+      margin-top: 28px;
+      padding: clamp(22px, 4vw, 36px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(10, 20, 36, 0.72);
+      box-shadow: 0 18px 64px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(16px);
+      scroll-margin-top: 24px;
+    }
+
+    section h2 {
+      margin: 0 0 16px;
+      font-size: clamp(1.55rem, 3vw, 2.2rem);
+      line-height: 1.1;
+      letter-spacing: -0.035em;
+    }
+
+    h3 {
+      margin: 28px 0 12px;
+      color: #d9e7ff;
+      font-size: 1.15rem;
+    }
+
+    p {
+      color: var(--muted);
+    }
+
+    .lead {
+      max-width: 900px;
+      margin-top: 0;
+      font-size: 1.05rem;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .problem-list {
+      counter-reset: problem;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin: 22px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .problem-list li {
+      counter-increment: problem;
+      position: relative;
+      padding: 18px 18px 18px 58px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--panel);
+      color: var(--muted);
+    }
+
+    .problem-list li::before {
+      content: counter(problem);
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      color: white;
+      font-weight: 800;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      margin-top: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: rgba(6, 14, 28, 0.55);
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+
+    th,
+    td {
+      padding: 13px 15px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(15, 27, 49, 0.98);
+      color: #dceaff;
+      font-size: 0.76rem;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    td:first-child,
+    th:first-child {
+      color: #dceaff;
+      font-weight: 800;
+    }
+
+    .tag,
+    .method {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 58px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .tag {
+      min-width: 0;
+      border: 1px solid var(--border);
+      color: #bae6fd;
+      background: rgba(14, 165, 233, 0.12);
+    }
+
+    .method.get { background: rgba(52, 211, 153, 0.14); color: #bbf7d0; }
+    .method.post { background: rgba(96, 165, 250, 0.16); color: #bfdbfe; }
+    .method.patch { background: rgba(251, 191, 36, 0.16); color: #fde68a; }
+    .method.delete { background: rgba(251, 113, 133, 0.16); color: #fecdd3; }
+
+    .diagram-card {
+      overflow: hidden;
+      margin-top: 16px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(167, 139, 250, 0.08)),
+        rgba(6, 14, 28, 0.8);
+    }
+
+    .diagram-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      color: #dceaff;
+      font-weight: 900;
+    }
+
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      min-width: 760px;
+      padding: 24px;
+    }
+
+    .feature-card {
+      padding: 18px;
+      transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+    }
+
+    .feature-card:hover,
+    .phase-card:hover,
+    .cost-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(96, 165, 250, 0.55);
+      background: var(--panel-strong);
+    }
+
+    .feature-card h3 {
+      margin-top: 0;
+    }
+
+    .feature-card ul,
+    .phase-card ul {
+      margin: 12px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .feature-card li,
+    .phase-card li {
+      margin: 7px 0;
+    }
+
+    .code-block {
+      overflow: hidden;
+      margin: 16px 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--code);
+    }
+
+    .code-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      color: var(--muted-2);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .copy-btn {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.72rem;
+      transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--brand);
+      color: var(--text);
+      background: rgba(96, 165, 250, 0.14);
+    }
+
+    pre {
+      overflow: auto;
+      margin: 0;
+      padding: 18px;
+      color: #dbeafe;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      tab-size: 2;
+    }
+
+    :not(pre) > code {
+      padding: 0.16rem 0.36rem;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 7px;
+      background: rgba(15, 23, 42, 0.8);
+      color: #bfdbfe;
+      font-size: 0.9em;
+    }
+
+    .phase-timeline {
+      position: relative;
+      display: grid;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .phase-card {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      gap: 16px;
+      padding: 18px;
+      transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+    }
+
+    .phase-number {
+      display: grid;
+      place-items: center;
+      width: 72px;
+      height: 72px;
+      border: 1px solid rgba(96, 165, 250, 0.38);
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(96, 165, 250, 0.22), rgba(34, 211, 238, 0.1));
+      color: #dbeafe;
+      font-size: 1.8rem;
+      font-weight: 950;
+    }
+
+    .phase-card h3 {
+      margin: 0;
+    }
+
+    .cost-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .cost-card {
+      position: relative;
+      overflow: hidden;
+      min-height: 152px;
+      padding: 18px;
+      transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+    }
+
+    .cost-card strong {
+      font-size: 1.75rem;
+      letter-spacing: -0.045em;
+    }
+
+    .cost-card small {
+      display: block;
+      margin-top: 10px;
+      color: var(--muted);
+    }
+
+    .cost-bar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: var(--h);
+      opacity: 0.22;
+      background: linear-gradient(90deg, var(--brand), var(--brand-2));
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .stat-card {
+      padding: 18px;
+    }
+
+    .stat-card strong {
+      color: #b8f3ff;
+      font-size: 1.6rem;
+      letter-spacing: -0.035em;
+    }
+
+    .callout {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border: 1px solid rgba(52, 211, 153, 0.28);
+      border-radius: var(--radius-sm);
+      background: rgba(52, 211, 153, 0.08);
+      color: #d1fae5;
+    }
+
+    .out-of-scope {
+      columns: 2;
+      margin: 12px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .footer {
+      margin-top: 28px;
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(8, 16, 31, 0.72);
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 1120px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: relative;
+        top: 0;
+        max-height: none;
+      }
+
+      .nav-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .shell {
+        width: min(100% - 20px, 100%);
+        padding-top: 10px;
+      }
+
+      .hero,
+      section {
+        border-radius: 22px;
+      }
+
+      .meta-grid,
+      .grid.two,
+      .grid.three,
+      .problem-list,
+      .cost-grid,
+      .stat-row {
+        grid-template-columns: 1fr;
+      }
+
+      .phase-card {
+        grid-template-columns: 1fr;
+      }
+
+      .nav-list {
+        grid-template-columns: 1fr;
+      }
+
+      .out-of-scope {
+        columns: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Table of contents">
+      <h2>Navigate</h2>
+      <ol class="nav-list">
+        <li><a href="#why"><span class="nav-index">1</span>Why v2</a></li>
+        <li><a href="#changes"><span class="nav-index">2</span>v1 vs v2</a></li>
+        <li><a href="#architecture"><span class="nav-index">3</span>Architecture</a></li>
+        <li><a href="#stack"><span class="nav-index">4</span>Tech Stack</a></li>
+        <li><a href="#pipeline"><span class="nav-index">5</span>AI Pipeline</a></li>
+        <li><a href="#layout"><span class="nav-index">6</span>Repository</a></li>
+        <li><a href="#config"><span class="nav-index">7</span>Config</a></li>
+        <li><a href="#api"><span class="nav-index">8</span>API</a></li>
+        <li><a href="#data"><span class="nav-index">9</span>Data Model</a></li>
+        <li><a href="#decisions"><span class="nav-index">10</span>Decisions</a></li>
+        <li><a href="#phases"><span class="nav-index">11</span>Phases</a></li>
+        <li><a href="#local-dev"><span class="nav-index">12</span>Local Dev</a></li>
+        <li><a href="#deployment"><span class="nav-index">13</span>Deployment</a></li>
+        <li><a href="#cost"><span class="nav-index">14</span>Cost</a></li>
+        <li><a href="#scope"><span class="nav-index">15</span>Out of Scope</a></li>
+        <li><a href="#references"><span class="nav-index">16</span>References</a></li>
+      </ol>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <div class="eyebrow">Sermon and Reference Assistant - v2.0 rewrite plan</div>
+        <h1>HOPTranscribe v2</h1>
+        <p>Realtime sermon transcription with AI-powered Bible scripture suggestions, rebuilt around a split-stage pipeline: dedicated streaming STT for speech and a separate text LLM for scripture matching.</p>
+        <div class="meta-grid">
+          <div class="meta-card"><span>Status</span><strong>Planning / scaffolding</strong></div>
+          <div class="meta-card"><span>Plan version</span><strong>1.0</strong></div>
+          <div class="meta-card"><span>Last updated</span><strong>2026-05-13</strong></div>
+          <div class="meta-card"><span>Owner</span><strong>HOPTranscribe v2 rewrite</strong></div>
+        </div>
+      </header>
+
+      <section id="why">
+        <h2>1. Why a v2 rewrite</h2>
+        <p class="lead">The v1 implementation combines transcription and scripture matching inside a single OpenAI Realtime voice-agent call. v2 separates the responsibilities, removes unused voice output, and fixes production-readiness gaps.</p>
+        <ol class="problem-list">
+          <li><strong>Cost.</strong> v1 pays premium audio token rates for a workload that never needs voice output.</li>
+          <li><strong>Latency.</strong> The realtime voice model has to decide between speaking, calling a tool, and staying silent, adding avoidable delay.</li>
+          <li><strong>Accuracy.</strong> One model is doing passive listening, transcription, and ranked scripture matching mid-stream, which increases false positives.</li>
+          <li><strong>Operational risk.</strong> In-memory production sessions, insecure WebSocket auth, unauthenticated SignalR, and a latent JSON parse bug need to be removed.</li>
+        </ol>
+        <div class="callout">v2 splits the pipeline, uses transcription-only STT, moves matching server-side with structured outputs, persists sessions, and locks down session ownership.</div>
+      </section>
+
+      <section id="changes">
+        <h2>2. What's changing from v1</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Area</th><th>v1 today</th><th>v2 target</th></tr></thead>
+            <tbody>
+              <tr><td>STT model</td><td><code>gpt-realtime-mini-2025-12-15</code> voice agent</td><td><strong><code>gpt-realtime-whisper</code></strong> streaming STT at $0.017/min</td></tr>
+              <tr><td>Scripture matching</td><td>Same realtime model, function call mid-stream</td><td><strong><code>gpt-5-mini</code></strong>, configurable, structured outputs, server-side</td></tr>
+              <tr><td>Voice TTS</td><td>Enabled but never played</td><td><strong>Removed entirely</strong></td></tr>
+              <tr><td>Transport</td><td>WebSocket with insecure API-key subprotocol</td><td><strong>WebRTC</strong> with ephemeral client secret and SDP exchange</td></tr>
+              <tr><td>Auth</td><td>None</td><td><strong>JWT HS256</strong> with per-session ownership</td></tr>
+              <tr><td>Persistence</td><td>In-memory sessions in production</td><td><strong>SQLite via EF Core</strong> on mounted volume</td></tr>
+              <tr><td>Languages</td><td>10 languages</td><td><strong>English only</strong> for v2; multilingual deferred</td></tr>
+              <tr><td>Scripture versions</td><td>Preferred version only</td><td><strong>Best match across versions</strong>, weighted toward preferred</td></tr>
+              <tr><td>Deployment</td><td>Azure, AWS, and GCP Terraform</td><td><strong>Azure Container Apps only</strong></td></tr>
+              <tr><td>Tests</td><td>None</td><td><strong>xUnit, Vitest, RTL</strong>, gated by CI per phase</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>3. Architecture</h2>
+        <p class="lead">The browser owns capture and WebRTC transport. The backend owns auth, persistence, matching, validation, and SignalR fan-out.</p>
+
+        <div class="diagram-card">
+          <div class="diagram-title"><span>System Architecture</span><span class="tag">Mermaid</span></div>
+          <pre class="mermaid">
+flowchart LR
+  subgraph Browser["Browser - React 18 / Vite / Tailwind / shadcn"]
+    Claim["POST /api/auth/claim"]
+    Session["POST /api/sessions"]
+    Peer["RTCPeerConnection + DataChannel"]
+    UI["Live transcript + scripture cards"]
+  end
+
+  subgraph Api[".NET 10 backend"]
+    Auth["AuthController"]
+    Sessions["SessionController"]
+    OpenAIController["OpenAIController"]
+    MatchController["MatchController"]
+    Hub["SessionHub"]
+    Jwt["JwtService"]
+    Realtime["OpenAIRealtimeService"]
+    Matcher["ScriptureMatchService"]
+    Validator["ScriptureValidator"]
+    Store["SessionService - EF Core / SQLite"]
+  end
+
+  subgraph OpenAI["OpenAI APIs"]
+    Transcription["Realtime transcription sessions - gpt-realtime-whisper"]
+    SDP["Realtime calls - SDP"]
+    Chat["Chat completions - gpt-5-mini json_schema"]
+  end
+
+  Claim --> Auth --> Jwt
+  Session --> Sessions --> Store
+  Browser -->|"JWT REST + SignalR"| Api
+  Peer -->|"Ephemeral WebRTC"| Transcription
+  Peer --> SDP
+  OpenAIController --> Realtime --> Transcription
+  UI -->|"Final utterance"| MatchController --> Matcher --> Chat
+  Matcher --> Validator --> Store
+  Store --> Hub --> UI
+          </pre>
+        </div>
+
+        <div class="diagram-card">
+          <div class="diagram-title"><span>Recording Data Flow</span><span class="tag">Mermaid</span></div>
+          <pre class="mermaid">
+sequenceDiagram
+  participant Mic as Microphone
+  participant Web as Browser UI
+  participant STT as gpt-realtime-whisper
+  participant API as .NET API
+  participant Match as ScriptureMatchService
+  participant LLM as gpt-5-mini
+  participant DB as SQLite
+  participant Hub as SignalR
+
+  Mic->>Web: getUserMedia audio track
+  Web->>STT: WebRTC audio stream
+  STT-->>Web: transcription deltas
+  Web->>Web: update live transcript
+  STT-->>Web: input_audio_transcription.completed
+  Web->>API: POST /api/match
+  API->>Match: validate request and rate limit
+  Match->>LLM: structured scripture matching
+  LLM-->>Match: matches json_schema
+  Match->>Match: validate canonical books and verse ranges
+  Match->>DB: persist segment and matches
+  API->>Hub: broadcast ScripturesMatched
+  Hub-->>Web: update scripture cards
+          </pre>
+        </div>
+      </section>
+
+      <section id="stack">
+        <h2>4. Tech stack</h2>
+        <div class="grid three">
+          <article class="feature-card">
+            <h3>Frontend</h3>
+            <ul>
+              <li>React 18.2 + TypeScript</li>
+              <li>Vite 4.4 build pipeline</li>
+              <li>Tailwind CSS 3.4 + shadcn/ui</li>
+              <li>SignalR 9.0 for collaboration</li>
+              <li>Native WebRTC for OpenAI Realtime</li>
+              <li>Vitest + React Testing Library</li>
+            </ul>
+          </article>
+          <article class="feature-card">
+            <h3>Backend</h3>
+            <ul>
+              <li>.NET 10 / ASP.NET Core</li>
+              <li>EF Core 10 + SQLite</li>
+              <li>SignalR fan-out to viewers</li>
+              <li>Serilog console and file logging</li>
+              <li>Application Insights when configured</li>
+              <li>xUnit integration and unit tests</li>
+            </ul>
+          </article>
+          <article class="feature-card">
+            <h3>AI + Infrastructure</h3>
+            <ul>
+              <li><code>gpt-realtime-whisper</code> streaming STT</li>
+              <li><code>gpt-5-mini</code> matching with fallback</li>
+              <li>Structured outputs via JSON schema</li>
+              <li>Docker Compose for local dev</li>
+              <li>Azure Container Apps production target</li>
+              <li>GitHub Actions CI/CD</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="pipeline">
+        <h2>5. AI pipeline detail</h2>
+        <div class="grid two">
+          <article class="feature-card">
+            <h3>5.1 Transcription</h3>
+            <p>Browser creates a WebRTC peer connection, adds the mic track, opens an <code>oai-events</code> data channel, posts the SDP offer to OpenAI with an ephemeral bearer token, and consumes delta/completed events.</p>
+            <ul>
+              <li>Endpoint: <code>/v1/realtime/transcription_sessions</code></li>
+              <li>Model: <code>gpt-realtime-whisper</code></li>
+              <li>Turn detection: server VAD</li>
+              <li>No audio output or TTS modality</li>
+            </ul>
+          </article>
+          <article class="feature-card">
+            <h3>5.2 Scripture Matching</h3>
+            <p>Matching runs server-side only. The browser never receives the system prompt or verse validation data.</p>
+            <ul>
+              <li>Endpoint: <code>POST /api/match</code></li>
+              <li>Model: <code>gpt-5-mini</code>, fallback <code>gpt-4o-mini</code></li>
+              <li>Output: strict JSON schema</li>
+              <li>Validation: canonical book, chapter, verse range, version</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="code-block">
+          <div class="code-head"><span>Transcription session update</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>{
+  "type": "transcription_session.update",
+  "input_audio_format": "pcm16",
+  "input_audio_transcription": {
+    "model": "gpt-realtime-whisper",
+    "language": "en"
+  },
+  "turn_detection": {
+    "type": "server_vad",
+    "threshold": 0.5,
+    "prefix_padding_ms": 300,
+    "silence_duration_ms": 500
+  }
+}</code></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-head"><span>Structured match response</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>{
+  "matches": [
+    {
+      "reference": "John 3:16",
+      "book": "John",
+      "chapter": 3,
+      "verseStart": 16,
+      "version": "NKJV",
+      "quote": "For God so loved the world...",
+      "confidence": 0.97
+    }
+  ]
+}</code></pre>
+        </div>
+
+        <h3>Rate limits</h3>
+        <div class="stat-row">
+          <div class="stat-card"><span>Per session</span><strong>30/min</strong></div>
+          <div class="stat-card"><span>Per IP</span><strong>120/min</strong></div>
+          <div class="stat-card"><span>Storage</span><strong>SQLite</strong></div>
+        </div>
+      </section>
+
+      <section id="layout">
+        <h2>6. Repository layout</h2>
+        <p class="lead">The v2 rewrite lives under <code>v2/</code>, with backend, frontend, infrastructure, and docs split cleanly.</p>
+        <div class="code-block">
+          <div class="code-head"><span>Target layout</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>HOPTranscribe/
+|-- v1/                              # archived current code
+|-- v2/
+|   |-- README.md
+|   |-- README.html
+|   |-- docker-compose.yml
+|   |-- .env.example
+|   |-- api/                         # .NET 10 backend
+|   |   |-- Controllers/
+|   |   |-- Hubs/
+|   |   |-- Services/
+|   |   |-- Data/
+|   |   |-- Models/
+|   |   |-- Validation/
+|   |   |-- Constants/
+|   |   |-- Middleware/
+|   |   `-- tests/
+|   |-- web/                         # React 18 + Vite 4
+|   |   |-- src/
+|   |   |   |-- routes/
+|   |   |   |-- components/
+|   |   |   |-- hooks/
+|   |   |   |-- services/
+|   |   |   |-- types/
+|   |   |   `-- constants/
+|   `-- infra/
+|       `-- azure/                   # Container Apps Terraform
+`-- docs/
+    `-- v2/</code></pre>
+        </div>
+      </section>
+
+      <section id="config">
+        <h2>7. Configuration and environment variables</h2>
+        <div class="grid two">
+          <div class="code-block">
+            <div class="code-head"><span>Backend</span><button class="copy-btn" type="button">Copy</button></div>
+            <pre><code>OpenAI__ApiKey=sk-proj-...
+OpenAI__TranscriptionModel=gpt-realtime-whisper
+OpenAI__MatchingModel=gpt-5-mini
+OpenAI__MatchingFallbackModel=gpt-4o-mini
+OpenAI__MatchingTemperature=0.2
+OpenAI__TimeoutSeconds=30
+
+Jwt__Issuer=hoptranscribe-api
+Jwt__Audience=hoptranscribe-web
+Jwt__SigningKey=&lt;min 32 chars&gt;
+Jwt__ExpiryMinutes=720
+
+ConnectionStrings__SessionDb=Data Source=/data/sessions.db
+AllowedOrigins__0=http://localhost:3000
+RateLimits__MatchPerSessionPerMinute=30
+RateLimits__MatchPerIpPerMinute=120</code></pre>
+          </div>
+          <div class="code-block">
+            <div class="code-head"><span>Frontend</span><button class="copy-btn" type="button">Copy</button></div>
+            <pre><code>VITE_API_BASE_URL=http://localhost:5001</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="api">
+        <h2>8. API surface</h2>
+        <h3>Auth</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Method</th><th>Path</th><th>Body</th><th>Returns</th></tr></thead>
+            <tbody>
+              <tr><td><span class="method post">POST</span></td><td><code>/api/auth/claim</code></td><td><code>{ username }</code></td><td><code>{ token, expiresAt, username }</code> plus HttpOnly cookie</td></tr>
+              <tr><td><span class="method post">POST</span></td><td><code>/api/auth/refresh</code></td><td>Cookie</td><td><code>{ token, expiresAt }</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Sessions</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Method</th><th>Path</th><th>Body</th><th>Returns</th></tr></thead>
+            <tbody>
+              <tr><td><span class="method get">GET</span></td><td><code>/api/sessions</code></td><td>-</td><td><code>PaginatedResult&lt;SessionDto&gt;</code></td></tr>
+              <tr><td><span class="method get">GET</span></td><td><code>/api/sessions/{code}</code></td><td>-</td><td><code>SessionDto</code></td></tr>
+              <tr><td><span class="method post">POST</span></td><td><code>/api/sessions</code></td><td><code>{ title }</code></td><td><code>SessionDto</code></td></tr>
+              <tr><td><span class="method patch">PATCH</span></td><td><code>/api/sessions/{code}/end</code></td><td>-</td><td><code>SessionDto</code></td></tr>
+              <tr><td><span class="method delete">DELETE</span></td><td><code>/api/sessions/{code}</code></td><td>-</td><td><code>204</code></td></tr>
+              <tr><td><span class="method post">POST</span></td><td><code>/api/sessions/{code}/transcripts</code></td><td><code>{ text, startedAt, endedAt }</code></td><td><code>TranscriptDto</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>OpenAI, matching, and SignalR</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Type</th><th>Name</th><th>Payload</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td><span class="method post">POST</span></td><td><code>/api/openai/transcription-session</code></td><td><code>{ sessionCode }</code></td><td><code>{ clientSecret, sdpUrl, model, expiresAt }</code></td></tr>
+              <tr><td><span class="method post">POST</span></td><td><code>/api/match</code></td><td><code>{ sessionCode, utterance, preferredVersion, n }</code></td><td><code>{ matches: ScriptureMatch[] }</code></td></tr>
+              <tr><td>Hub</td><td><code>JoinSession(sessionCode)</code></td><td>session code</td><td>Adds caller to verified SignalR group</td></tr>
+              <tr><td>Hub</td><td><code>ScripturesMatched</code></td><td><code>{ sessionCode, utteranceId, matches[] }</code></td><td>Server-to-client broadcast</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="data">
+        <h2>9. Data model</h2>
+        <div class="diagram-card">
+          <div class="diagram-title"><span>SQLite schema</span><span class="tag">ERD</span></div>
+          <pre class="mermaid">
+erDiagram
+  SESSION ||--o{ TRANSCRIPT_SEGMENT : contains
+  TRANSCRIPT_SEGMENT ||--o{ SCRIPTURE_MATCH : has
+
+  SESSION {
+    guid Id
+    string Code
+    string Title
+    string OwnerUsername
+    string Status
+    datetime CreatedAt
+    datetime EndedAt
+  }
+
+  TRANSCRIPT_SEGMENT {
+    guid Id
+    guid SessionId
+    string Text
+    datetime StartedAt
+    datetime EndedAt
+  }
+
+  SCRIPTURE_MATCH {
+    guid Id
+    guid SegmentId
+    string Reference
+    string Book
+    int Chapter
+    int VerseStart
+    int VerseEnd
+    string Version
+    string Quote
+    double Confidence
+    int Rank
+  }
+          </pre>
+        </div>
+        <p>Indexes: <code>Sessions.Code</code> unique, <code>Sessions.OwnerUsername</code>, <code>TranscriptSegments.SessionId</code>, and <code>ScriptureMatches.SegmentId</code>.</p>
+      </section>
+
+      <section id="decisions">
+        <h2>10. Decisions log</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Decision</th><th>Choice</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Scope</td><td><strong>Full rewrite</strong></td><td>v2 lives in <code>v2/</code>; v1 archived to <code>v1/</code>.</td></tr>
+              <tr><td>2</td><td>STT model</td><td><strong><code>gpt-realtime-whisper</code></strong></td><td>Streaming deltas, transcription-only, $0.017/min.</td></tr>
+              <tr><td>3</td><td>Matching</td><td><strong>Pure LLM</strong></td><td>No RAG for v2; structured outputs and validators reduce hallucination risk.</td></tr>
+              <tr><td>4</td><td>Transport</td><td><strong>WebRTC</strong></td><td>Ephemeral token, no insecure client API key protocol.</td></tr>
+              <tr><td>5</td><td>Persistence</td><td><strong>SQLite + EF Core</strong></td><td>Mounted Docker volume; multi-instance deferred.</td></tr>
+              <tr><td>6</td><td>Auth</td><td><strong>JWT HS256</strong></td><td>Per-session ownership with pseudonymous users.</td></tr>
+              <tr><td>7</td><td>Deployment</td><td><strong>Azure Container Apps</strong></td><td>AWS/GCP deferred.</td></tr>
+              <tr><td>8</td><td>Languages</td><td><strong>English only</strong></td><td>Multilingual support deferred to v2.x.</td></tr>
+              <tr><td>9</td><td>Matching trigger</td><td><strong>Finalized utterances</strong></td><td>Rate-limited server-side to protect UX and cost.</td></tr>
+              <tr><td>10</td><td>Model config</td><td><strong>Configurable</strong></td><td>Fallback to <code>gpt-4o-mini</code> if configured model is unavailable.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="phases">
+        <h2>11. Phased delivery plan</h2>
+        <p class="lead">Each phase is independently demoable and gated by passing CI.</p>
+        <div class="phase-timeline">
+          <article class="phase-card">
+            <div class="phase-number">0</div>
+            <div><h3>Scaffold</h3><ul><li>Create the v2 skeleton, archive v1, initialize backend, frontend, Docker Compose, and CI build gates.</li></ul></div>
+          </article>
+          <article class="phase-card">
+            <div class="phase-number">1</div>
+            <div><h3>Auth and sessions</h3><ul><li>Add JWT claim/refresh, SQLite sessions, CRUD endpoints, ownership rules, and persistence tests.</li></ul></div>
+          </article>
+          <article class="phase-card">
+            <div class="phase-number">2</div>
+            <div><h3>STT pipeline</h3><ul><li>Create transcription sessions, connect WebRTC, and render live transcript without scripture matching.</li></ul></div>
+          </article>
+          <article class="phase-card">
+            <div class="phase-number">3</div>
+            <div><h3>Matching service</h3><ul><li>Call <code>gpt-5-mini</code>, enforce JSON schema, validate scripture references, add rate limiting, and test edge cases.</li></ul></div>
+          </article>
+          <article class="phase-card">
+            <div class="phase-number">4</div>
+            <div><h3>End-to-end wiring</h3><ul><li>Call matching on finalized utterances, persist transcript segments, and render scripture cards.</li></ul></div>
+          </article>
+          <article class="phase-card">
+            <div class="phase-number">5</div>
+            <div><h3>Collaboration</h3><ul><li>Authorize SignalR, join session groups, create read-only viewer flow, and test two-client sync.</li></ul></div>
+          </article>
+          <article class="phase-card">
+            <div class="phase-number">6</div>
+            <div><h3>Polish and hardening</h3><ul><li>Add middleware, error boundaries, toasts, reconnect backoff, settings, telemetry, logging, and load tests.</li></ul></div>
+          </article>
+          <article class="phase-card">
+            <div class="phase-number">7</div>
+            <div><h3>Azure deploy</h3><ul><li>Build Container Apps Terraform, GitHub Actions deployment, ACR publish, and smoke tests.</li></ul></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="local-dev">
+        <h2>12. Local development target</h2>
+        <p class="lead">These commands are the target experience after scaffolding is complete.</p>
+        <div class="grid two">
+          <div class="code-block">
+            <div class="code-head"><span>Docker Compose</span><button class="copy-btn" type="button">Copy</button></div>
+            <pre><code>cd v2
+cp .env.example .env
+# edit .env and set OPENAI_API_KEY and JWT_SIGNING_KEY
+docker compose up -d
+# web -> http://localhost:3000
+# api -> http://localhost:5001/health/status</code></pre>
+          </div>
+          <div class="code-block">
+            <div class="code-head"><span>Backend and frontend</span><button class="copy-btn" type="button">Copy</button></div>
+            <pre><code># backend
+cd v2/api
+dotnet restore
+dotnet ef database update
+dotnet run
+
+# frontend
+cd v2/web
+npm install
+npm run dev</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="deployment">
+        <h2>13. Deployment</h2>
+        <p class="lead">Production target is Azure Container Apps: separate <code>api</code> and <code>web</code> apps behind a shared environment, Log Analytics, Application Insights, and persistent storage for SQLite.</p>
+        <div class="grid three">
+          <article class="feature-card"><h3>Storage</h3><p>SQLite persists on a Container Apps storage mount backed by Azure Files. Single-replica is acceptable for v2.</p></article>
+          <article class="feature-card"><h3>Secrets</h3><p><code>OpenAI__ApiKey</code> and <code>Jwt__SigningKey</code> live in Container Apps secrets or Key Vault references.</p></article>
+          <article class="feature-card"><h3>Ingress</h3><p>The web app is external. The API can be internal or external behind APIM, with custom domains via managed certs.</p></article>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span>Terraform</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>cd v2/infra/azure
+terraform init
+terraform apply \
+  -var "openai_api_key=$OPENAI_API_KEY" \
+  -var "jwt_signing_key=$JWT_SIGNING_KEY"</code></pre>
+        </div>
+      </section>
+
+      <section id="cost">
+        <h2>14. Cost model</h2>
+        <p class="lead">Assumptions: 10 hours of sermon transcription per month, about 60 utterances/hour, and about 600 matching calls/month.</p>
+        <div class="cost-grid">
+          <article class="cost-card"><span>Transcription</span><strong>$10.20</strong><small><code>gpt-realtime-whisper</code>, $0.017/min x 600 min</small><div class="cost-bar" style="--h: 38%"></div></article>
+          <article class="cost-card"><span>Matching</span><strong>$0.52</strong><small>Approx input + output token cost for <code>gpt-5-mini</code></small><div class="cost-bar" style="--h: 8%"></div></article>
+          <article class="cost-card"><span>Azure host</span><strong>$22-32</strong><small>Container Apps, Azure Files, and small App Insights usage</small><div class="cost-bar" style="--h: 72%"></div></article>
+          <article class="cost-card"><span>Total</span><strong>~$33-43</strong><small>About 80% cheaper than the v1 estimate of ~$180/month</small><div class="cost-bar" style="--h: 88%"></div></article>
+        </div>
+      </section>
+
+      <section id="scope">
+        <h2>15. Out of scope for v2</h2>
+        <ul class="out-of-scope">
+          <li>Multi-language transcription</li>
+          <li>PDF/DOCX export of sermons</li>
+          <li>Analytics dashboard</li>
+          <li>Shared sermon libraries beyond per-session owner</li>
+          <li>Bible verse-text storage on backend</li>
+          <li>RAG-backed matching with embeddings</li>
+          <li>AWS / GCP Terraform</li>
+          <li>Voice TTS or "ask the sermon"</li>
+          <li>Mobile apps beyond responsive web</li>
+        </ul>
+      </section>
+
+      <section id="references">
+        <h2>16. References</h2>
+        <div class="grid two">
+          <article class="feature-card"><h3>OpenAI</h3><ul><li><a href="https://developers.openai.com/api/docs/models/gpt-realtime-whisper">gpt-realtime-whisper model card</a></li><li><a href="https://developers.openai.com/api/docs/models/gpt-realtime-2">gpt-realtime-2 model card</a></li><li><a href="https://platform.openai.com/docs/guides/realtime">Realtime API guide</a></li><li><a href="https://platform.openai.com/docs/guides/realtime-transcription">Realtime transcription guide</a></li><li><a href="https://platform.openai.com/docs/guides/structured-outputs">Structured outputs</a></li></ul></article>
+          <article class="feature-card"><h3>Project docs</h3><ul><li><code>../docs/architecture.md</code></li><li><code>v2/README.md</code></li><li><code>v2/infra/azure/</code></li></ul></article>
+        </div>
+      </section>
+
+      <footer class="footer">
+        HOPTranscribe v2 rewrite plan - generated from <code>v2/README.md</code>
+      </footer>
+    </main>
+  </div>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "dark",
+      securityLevel: "loose",
+      themeVariables: {
+        background: "transparent",
+        primaryColor: "#10213f",
+        primaryTextColor: "#e5eefb",
+        primaryBorderColor: "#60a5fa",
+        lineColor: "#7dd3fc",
+        secondaryColor: "#172554",
+        tertiaryColor: "#0f172a",
+        noteBkgColor: "#172554",
+        noteTextColor: "#e5eefb"
+      }
+    });
+
+    const navLinks = [...document.querySelectorAll(".nav-list a")];
+    const sections = navLinks
+      .map((link) => document.querySelector(link.getAttribute("href")))
+      .filter(Boolean);
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+      if (!visible) return;
+
+      navLinks.forEach((link) => {
+        link.classList.toggle("active", link.getAttribute("href") === `#${visible.target.id}`);
+      });
+    }, { rootMargin: "-18% 0px -68% 0px", threshold: [0.1, 0.25, 0.5] });
+
+    sections.forEach((section) => observer.observe(section));
+
+    document.querySelectorAll(".copy-btn").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const block = button.closest(".code-block");
+        const code = block?.querySelector("code")?.innerText;
+        if (!code) return;
+
+        await navigator.clipboard.writeText(code);
+        const original = button.textContent;
+        button.textContent = "Copied";
+        setTimeout(() => {
+          button.textContent = original;
+        }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>
