@@ -1,0 +1,41 @@
+# Copy to terraform.tfvars and edit. NEVER commit terraform.tfvars.
+
+# Identity / naming
+name_prefix = "hoptx"
+env         = "prod"
+location    = "eastus"
+
+tags = {
+  application = "HOPTranscribe"
+  managedBy   = "terraform"
+  component   = "v2"
+  owner       = "your-team"
+}
+
+# Secrets (also valid to provide via -var or env: TF_VAR_openai_api_key)
+openai_api_key = "sk-proj-..."
+# Leave commented to auto-generate a 64-char random key on first apply.
+# jwt_signing_key = "..."
+
+# Models
+matching_model          = "gpt-5-mini"
+matching_fallback_model = "gpt-4o-mini"
+realtime_model          = "gpt-realtime-whisper"
+
+# Image references — push with the same tag before terraform apply
+api_image_repository = "hoptranscribe-api"
+web_image_repository = "hoptranscribe-web"
+image_tag            = "v2.0.0"
+
+# CORS: comma-separated. The web container app's FQDN is automatically reachable
+# from the SPA, but if you front it with a custom domain add it here.
+allowed_origins = "https://hoptranscribe.example.com"
+
+# Optional: extra principals (object IDs) granted Key Vault Secrets Officer
+# key_vault_authorized_object_ids = ["00000000-0000-0000-0000-000000000000"]
+
+# Scaling (defaults are sane for low traffic; bump for production load)
+api_min_replicas = 1
+api_max_replicas = 3
+web_min_replicas = 1
+web_max_replicas = 2

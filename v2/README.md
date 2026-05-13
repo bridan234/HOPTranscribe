@@ -4,7 +4,7 @@
 
 Real-time sermon transcription with AI-powered Bible scripture suggestions. Built with a split-stage realtime pipeline: dedicated streaming STT for speech and a separate text LLM for scripture matching.
 
-> Status: **Phases 0–6 complete**. This README is the source of truth for the v2 rewrite. The v1 implementation has been archived to `../v1/`.
+> Status: **Phases 0–7 complete (Azure-only Terraform)**. This README is the source of truth for the v2 rewrite. The v1 implementation has been archived to `../v1/`.
 
 ---
 
@@ -545,10 +545,15 @@ Each phase is independently demoable and gated by passing CI.
 - Serilog file rotation enabled in production.
 - TODO: load tests (5 concurrent sessions, sustained 10 min) deferred to deploy phase.
 
-### Phase 7 — Azure deploy
-- `infra/azure/main.tf` — Container Apps environment, ACR, Log Analytics, Application Insights, persistent volume for SQLite (or migrate to Azure SQL/Postgres if v2.x).
-- GitHub Actions workflow: build → push to ACR → `terraform apply` → smoke test.
-- Demo: `terraform apply` produces a working `*.azurecontainerapps.io` URL.
+### Phase 7 — Azure deploy ✅ (Terraform)
+- `infra/azure/` — single Terraform root for the Azure target:
+  - Resource group, Log Analytics + workspace-based App Insights
+  - ACR (Basic), user-assigned managed identity with `AcrPull` + `Key Vault Secrets User`
+  - Key Vault with `openai-api-key` and `jwt-signing-key` (versionless references)
+  - Storage account + Azure Files share mounted at `/data` for SQLite
+  - Container Apps environment + API + web container apps, both with KV-backed secrets and Container App secret references
+- See [`infra/azure/README.md`](./infra/azure/README.md) for deploy steps (build → push → apply, or apply targeted ACR first).
+- TODO: GitHub Actions workflow (build → push → apply → smoke test) — not yet implemented.
 
 ## 12. Local development (target)
 
