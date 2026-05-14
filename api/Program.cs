@@ -30,7 +30,26 @@ builder.Services.Configure<RateLimitSettings>(builder.Configuration.GetSection("
 
 var connectionString = builder.Configuration.GetConnectionString("SessionDb")
     ?? "Data Source=data/sessions.db";
-builder.Services.AddDbContext<HopDbContext>(opts => opts.UseSqlite(connectionString));
+
+// Provider sniffing: Npgsql connection strings start with "Host=" (Supabase /
+// any standard Postgres). SQLite uses "Data Source=". Tests replace the
+// DbContext registration outright, so they're unaffected.
+var isPostgres = connectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase);
+
+builder.Services.AddDbContext<HopDbContext>(opts =>
+{
+    if (isPostgres)
+    {
+        opts.UseNpgsql(connectionString, npg =>
+        {
+            npg.MigrationsHistoryTable("__EFMigrationsHistory", "hoptranscribe");
+        });
+    }
+    else
+    {
+        opts.UseSqlite(connectionString);
+    }
+});
 
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddSingleton<BibleBookCatalog>();
@@ -143,21 +162,38 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<HopDbContext>();
     try
     {
-        var dataSource = SqliteDataSourcePath(connectionString);
-        if (!string.IsNullOrWhiteSpace(dataSource))
+        // Read the connection string off the actual DbContext rather than the captured
+        // top-level variable: tests (WebApplicationFactory) override the DbContext after
+        // Program.cs has already evaluated `connectionString`, so the variable can lie.
+        var activeCs = db.Database.GetConnectionString() ?? string.Empty;
+
+        if (db.Database.IsSqlite())
         {
-            var dir = Path.GetDirectoryName(dataSource);
-            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+            var dataSource = SqliteDataSourcePath(activeCs);
+            var isInMemory = dataSource.Contains(":memory:", StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(dataSource) && !isInMemory)
             {
-                Directory.CreateDirectory(dir);
+                var dir = Path.GetDirectoryName(dataSource);
+                if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
             }
+            // SQLite (dev/local/tests) — no Sqlite migration set ships with the app,
+            // so create the schema in-place. Idempotent.
+            db.Database.EnsureCreated();
+            Log.Information("SQLite schema ensured at {ConnectionString}", activeCs);
         }
-        db.Database.Migrate();
-        Log.Information("Database migrations applied to {ConnectionString}", connectionString);
+        else
+        {
+            db.Database.Migrate();
+            Log.Information("Postgres migrations applied");
+        }
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "Failed to apply database migrations");
+        Log.Fatal(ex, "Failed to initialize database. Aborting startup so the orchestrator can retry.");
+        throw;
     }
 }
 

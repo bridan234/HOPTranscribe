@@ -17,6 +17,14 @@ openai_api_key = "sk-proj-..."
 # Leave commented to auto-generate a 64-char random key on first apply.
 # jwt_signing_key = "..."
 
+# Postgres (Supabase). Supply via env vars TF_VAR_db_host / TF_VAR_db_password
+# in CI rather than checking these in.
+db_host     = "db.<project-ref>.supabase.co"
+db_password = "..."
+# db_port = 5432       # default; 6543 = Supabase pooler (don't use for migrations)
+# db_user = "postgres" # default
+# db_name = "postgres" # default
+
 # Models
 matching_model          = "gpt-5-mini"
 matching_fallback_model = "gpt-4o-mini"

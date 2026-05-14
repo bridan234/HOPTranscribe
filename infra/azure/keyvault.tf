@@ -45,3 +45,13 @@ resource "azurerm_key_vault_secret" "jwt_signing_key" {
 
   depends_on = [azurerm_role_assignment.deployer_kv_secrets_officer]
 }
+
+resource "azurerm_key_vault_secret" "db_connection_string" {
+  name         = "db-connection-string"
+  value        = local.db_connection_string
+  key_vault_id = azurerm_key_vault.this.id
+  content_type = "text/plain"
+  tags         = var.tags
+
+  depends_on = [azurerm_role_assignment.deployer_kv_secrets_officer]
+}

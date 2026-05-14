@@ -112,13 +112,13 @@ variable "api_memory" {
 variable "api_min_replicas" {
   description = "Min replicas for the API container app."
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "api_max_replicas" {
   description = "Max replicas for the API container app."
   type        = number
-  default     = 3
+  default     = 1
 }
 
 variable "web_cpu" {
@@ -136,17 +136,46 @@ variable "web_memory" {
 variable "web_min_replicas" {
   description = "Min replicas for the web container app."
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "web_max_replicas" {
   description = "Max replicas for the web container app."
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "key_vault_authorized_object_ids" {
   description = "Additional Entra object IDs (users/groups/SPNs) granted Key Vault Secrets Officer for operations like rotating secrets."
   type        = list(string)
   default     = []
+}
+
+variable "db_host" {
+  description = "Postgres host. For Supabase: db.<project-ref>.supabase.co. Threaded in from the SUPABASE_DB_HOST GitHub secret."
+  type        = string
+}
+
+variable "db_port" {
+  description = "Postgres port. Supabase direct = 5432 (required for migrations and session-level features), pooler = 6543."
+  type        = number
+  default     = 5432
+}
+
+variable "db_user" {
+  description = "Postgres user. Supabase default = postgres."
+  type        = string
+  default     = "postgres"
+}
+
+variable "db_password" {
+  description = "Postgres password. Threaded in from the SUPABASE_DB_PASSWORD GitHub secret."
+  type        = string
+  sensitive   = true
+}
+
+variable "db_name" {
+  description = "Postgres database name. Supabase default = postgres."
+  type        = string
+  default     = "postgres"
 }

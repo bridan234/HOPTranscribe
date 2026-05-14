@@ -14,16 +14,30 @@ public class HopDbContext : DbContext
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
-        configurationBuilder
-            .Properties<DateTimeOffset>()
-            .HaveConversion<DateTimeOffsetToBinaryConverter>();
-        configurationBuilder
-            .Properties<DateTimeOffset?>()
-            .HaveConversion<DateTimeOffsetToBinaryConverter>();
+        // Npgsql has native DateTimeOffset (timestamp with time zone) support, so the
+        // binary conversion would actively get in the way. Only apply it for SQLite,
+        // which has no native DateTimeOffset type.
+        if (Database.IsSqlite())
+        {
+            configurationBuilder
+                .Properties<DateTimeOffset>()
+                .HaveConversion<DateTimeOffsetToBinaryConverter>();
+            configurationBuilder
+                .Properties<DateTimeOffset?>()
+                .HaveConversion<DateTimeOffsetToBinaryConverter>();
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Postgres-only: keep our tables in their own schema so the Supabase project
+        // can host multiple apps side by side. SQLite has no real schema concept,
+        // so we leave the default for tests/local dev.
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.HasDefaultSchema("hoptranscribe");
+        }
+
         modelBuilder.Entity<SessionEntity>(b =>
         {
             b.HasKey(x => x.Id);

@@ -6,16 +6,6 @@ resource "azurerm_container_app_environment" "this" {
   tags                       = var.tags
 }
 
-# SMB file share registered with the env, mounted by the API container.
-resource "azurerm_container_app_environment_storage" "sqlite" {
-  name                         = "sqlite-share"
-  container_app_environment_id = azurerm_container_app_environment.this.id
-  account_name                 = azurerm_storage_account.this.name
-  share_name                   = azurerm_storage_share.sqlite.name
-  access_key                   = azurerm_storage_account.this.primary_access_key
-  access_mode                  = "ReadWrite"
-}
-
 locals {
   # Container App revisions are immutable; if the image tag is "latest", baking
   # the env-vars set is sufficient because revision suffix changes will not be
@@ -54,6 +44,12 @@ resource "azurerm_container_app" "api" {
     identity            = azurerm_user_assigned_identity.app.id
   }
 
+  secret {
+    name                = "db-connection-string"
+    key_vault_secret_id = azurerm_key_vault_secret.db_connection_string.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
+  }
+
   template {
     min_replicas = var.api_min_replicas
     max_replicas = var.api_max_replicas
@@ -73,8 +69,8 @@ resource "azurerm_container_app" "api" {
         value = "http://+:8080"
       }
       env {
-        name  = "ConnectionStrings__SessionDb"
-        value = "Data Source=/data/sessions.db;Cache=Shared"
+        name        = "ConnectionStrings__SessionDb"
+        secret_name = "db-connection-string"
       }
       env {
         name  = "OpenAI__RealtimeModel"
@@ -118,11 +114,6 @@ resource "azurerm_container_app" "api" {
         value = azurerm_application_insights.this.connection_string
       }
 
-      volume_mounts {
-        name = "sqlite"
-        path = "/data"
-      }
-
       liveness_probe {
         path             = "/health/status"
         port             = 8080
@@ -139,11 +130,6 @@ resource "azurerm_container_app" "api" {
       }
     }
 
-    volume {
-      name         = "sqlite"
-      storage_type = "AzureFile"
-      storage_name = azurerm_container_app_environment_storage.sqlite.name
-    }
   }
 
   ingress {

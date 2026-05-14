@@ -74,7 +74,7 @@ output "log_analytics_workspace_id" {
   value       = azurerm_log_analytics_workspace.this.workspace_id
 }
 
-output "storage_account_name" {
-  description = "Storage account hosting the SQLite file share."
-  value       = azurerm_storage_account.this.name
+output "db_host" {
+  description = "Postgres host the API points at (sourced from var.db_host)."
+  value       = var.db_host
 }
