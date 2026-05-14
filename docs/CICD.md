@@ -1,12 +1,12 @@
-# v2 CI/CD
+# CI/CD
 
-Three GitHub Actions workflows under `.github/workflows/` drive v2:
+Three GitHub Actions workflows under `.github/workflows/` drive the pipeline:
 
 | Workflow | Purpose | Trigger | Needs Azure auth |
 |---|---|---|---|
-| `v2-ci.yml` | Build verification (API, web, Docker, terraform validate) | PR/push to `v2` touching `v2/**` | No |
-| `v2-deploy.yml` | Build images → push to ACR → roll Container App revisions | Push to `v2`/`main` touching `api/**` or `web/**`, or manual | Yes (OIDC) |
-| `v2-infra.yml` | `terraform plan` / `apply` / `destroy` on `infra/azure` | Manual only | Yes (OIDC) |
+| `ci.yml` | Build verification (API + test, web, Docker, terraform validate) | PR/push to `v2` or `main` touching `api/**`, `web/**`, `infra/**` | No |
+| `deploy.yml` | Build images → push to ACR → roll Container App revisions | Push to `v2`/`main` touching `api/**` or `web/**`, or manual | Yes (OIDC) |
+| `infra.yml` | `terraform plan` / `apply` / `destroy` on `infra/azure` | Manual only | Yes (OIDC) |
 
 The split keeps two contracts clean:
 
@@ -20,7 +20,7 @@ The split keeps two contracts clean:
 ```bash
 # Adjust as needed
 RG=rg-hoptx-prod
-APP_NAME=github-v2-hoptranscribe
+APP_NAME=github-hoptranscribe
 
 # Create app registration (or use an existing UAMI in your tenant)
 APP_ID=$(az ad app create --display-name "$APP_NAME" --query appId -o tsv)
@@ -40,7 +40,7 @@ az role assignment create --assignee-object-id "$SP_OBJECT_ID" --assignee-princi
 REPO=bridan234/HOPTranscribe
 
 az ad app federated-credential create --id "$APP_ID" --parameters "{
-  \"name\":\"github-v2-main\",
+  \"name\":\"github-v2-branch\",
   \"issuer\":\"https://token.actions.githubusercontent.com\",
   \"subject\":\"repo:$REPO:ref:refs/heads/v2\",
   \"audiences\":[\"api://AzureADTokenExchange\"]
@@ -48,7 +48,7 @@ az ad app federated-credential create --id "$APP_ID" --parameters "{
 
 # Optional: federation for pull_request events too
 az ad app federated-credential create --id "$APP_ID" --parameters "{
-  \"name\":\"github-v2-pr\",
+  \"name\":\"github-pr\",
   \"issuer\":\"https://token.actions.githubusercontent.com\",
   \"subject\":\"repo:$REPO:pull_request\",
   \"audiences\":[\"api://AzureADTokenExchange\"]
@@ -89,13 +89,13 @@ az role assignment create --assignee-object-id "$SP_OBJECT_ID" --assignee-princi
 | `TF_BACKEND_RESOURCE_GROUP` | `rg-hoptx-tfstate` |
 | `TF_BACKEND_STORAGE_ACCOUNT` | `sthoptxtfstate123` |
 | `TF_BACKEND_CONTAINER` | `tfstate` |
-| `TF_BACKEND_KEY` | `v2-prod.tfstate` |
+| `TF_BACKEND_KEY` | `prod.tfstate` |
 | `TF_VAR_NAME_PREFIX` | `hoptx` |
 | `TF_VAR_ENV` | `prod` |
 | `TF_VAR_LOCATION` | `eastus` |
 | `TF_VAR_ALLOWED_ORIGINS` | `https://app.example.com` |
 
-After the first `v2-infra.yml` apply completes, also set:
+After the first `infra.yml` apply completes, also set:
 
 | Name | Source (from `terraform output`) |
 |---|---|
@@ -110,16 +110,16 @@ After the first `v2-infra.yml` apply completes, also set:
 
 ### Initial deployment
 
-1. Run `v2-infra.yml` with `action=plan` to review.
-2. Run `v2-infra.yml` with `action=apply` and `image_tag=latest`.
-3. The first apply will fail on the Container App creates because the ACR is empty — that's expected and documented in `v2/infra/azure/README.md`. Continue with step 4.
-4. Run `v2-deploy.yml` (or it will auto-run on the next push to `v2/api/**` or `v2/web/**`).
-5. Re-run `v2-infra.yml` apply to finish reconciling everything (revision now exists with a real image).
+1. Run `infra.yml` with `action=plan` to review.
+2. Run `infra.yml` with `action=apply` and `image_tag=latest`.
+3. The first apply will fail on the Container App creates because the ACR is empty — that's expected and documented in `infra/azure/README.md`. Continue with step 4.
+4. Run `deploy.yml` (or it will auto-run on the next push to `api/**` or `web/**`).
+5. Re-run `infra.yml` apply to finish reconciling everything (revision now exists with a real image).
 
 ### Subsequent deploys
 
-- Push to `v2` touching `v2/api/**` or `v2/web/**` → `v2-deploy.yml` builds, pushes, rolls.
-- For infrastructure changes: edit `v2/infra/azure/**`, push, then trigger `v2-infra.yml` with `action=plan` (artifact attached for review), then `action=apply`.
+- Push to `v2` touching `api/**` or `web/**` → `deploy.yml` builds, pushes, rolls.
+- For infrastructure changes: edit `infra/azure/**`, push, then trigger `infra.yml` with `action=plan` (artifact attached for review), then `action=apply`.
 
 ### Rollback
 
@@ -129,11 +129,11 @@ az containerapp revision list --name <api-app> --resource-group <rg> -o table
 az containerapp revision activate --revision <previous-revision> --name <api-app> -g <rg>
 ```
 
-Or re-run `v2-deploy.yml` with an explicit `image_tag` input pointing at a prior tag.
+Or re-run `deploy.yml` with an explicit `image_tag` input pointing at a prior tag.
 
 ### Destroy
 
-Run `v2-infra.yml` with `action=destroy` and `auto_approve=true`. There is an explicit guard against accidental destroys without `auto_approve`.
+Run `infra.yml` with `action=destroy` and `auto_approve=true`. There is an explicit guard against accidental destroys without `auto_approve`.
 
 ## Security notes
 
@@ -144,7 +144,7 @@ Run `v2-infra.yml` with `action=destroy` and `auto_approve=true`. There is an ex
 
 ## Troubleshooting
 
-- **First `terraform apply` fails creating Container Apps with `ImagePullBackOff`** — expected on a fresh ACR. Re-run after `v2-deploy.yml` has pushed at least one tag.
+- **First `terraform apply` fails creating Container Apps with `ImagePullBackOff`** — expected on a fresh ACR. Re-run after `deploy.yml` has pushed at least one tag.
 - **`AuthorizationFailed` during role assignment** — the deploy principal is missing `User Access Administrator`.
 - **Federated credential token validation fails** — confirm `subject` matches the workflow's `${{ github.ref }}` (e.g. `repo:OWNER/REPO:ref:refs/heads/v2`) and the OIDC issuer is `https://token.actions.githubusercontent.com`.
 - **`az containerapp update` succeeds but the revision is unhealthy** — check `az containerapp logs show --name <app> -g <rg> --follow` and the API's liveness probe path (`/health/status`).

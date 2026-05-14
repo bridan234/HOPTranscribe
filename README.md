@@ -553,9 +553,9 @@ Each phase is independently demoable and gated by passing CI.
   - Storage account + Azure Files share mounted at `/data` for SQLite
   - Container Apps environment + API + web container apps, both with KV-backed secrets and Container App secret references
 - GitHub Actions in `.github/workflows/`:
-  - `v2-ci.yml` — build verification (API, web, Docker, terraform validate) on PR/push to `v2`
-  - `v2-deploy.yml` — OIDC-authenticated build → push → `az containerapp update` roll on `v2/api/**` or `v2/web/**`
-  - `v2-infra.yml` — manual `terraform plan/apply/destroy` against an azurerm backend (auto-injected via `backend_override.tf`)
+  - `ci.yml` — build verification (API + test, web, Docker, terraform validate) on PR/push to `v2`/`main`
+  - `deploy.yml` — OIDC-authenticated build → push → `az containerapp update` roll on `api/**` or `web/**`
+  - `infra.yml` — manual `terraform plan/apply/destroy` against an azurerm backend (auto-injected via `backend_override.tf`)
 - See [`infra/azure/README.md`](./infra/azure/README.md) for deploy steps and [`docs/CICD.md`](./docs/CICD.md) for the OIDC federation + secrets/vars setup.
 
 ## 12. Local development (target)

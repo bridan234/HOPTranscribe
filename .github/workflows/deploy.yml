@@ -1,8 +1,8 @@
-name: v2 Deploy (build → push → roll)
+name: Deploy (build → push → roll)
 
 # Builds API + web images, pushes them to ACR, and rolls each Container App
 # revision to the new digest. Terraform owns infrastructure; this workflow
-# owns image rolls only. Run `v2-infra.yml` first (or terraform apply
+# owns image rolls only. Run `infra.yml` first (or terraform apply
 # locally) to provision the cluster before invoking this workflow.
 #
 # === Required GitHub configuration ===
@@ -21,7 +21,7 @@ name: v2 Deploy (build → push → roll)
 #
 # Federation setup (one-time, on the deploy principal):
 #   az ad app federated-credential create --id <APP_ID> --parameters '{
-#     "name":"github-v2-deploy","issuer":"https://token.actions.githubusercontent.com",
+#     "name":"github-deploy","issuer":"https://token.actions.githubusercontent.com",
 #     "subject":"repo:<owner>/<repo>:ref:refs/heads/v2","audiences":["api://AzureADTokenExchange"]}'
 
 on:
@@ -30,7 +30,7 @@ on:
     paths:
       - 'api/**'
       - 'web/**'
-      - '.github/workflows/v2-deploy.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
       image_tag:
@@ -44,7 +44,7 @@ on:
         default: both
 
 concurrency:
-  group: v2-deploy
+  group: deploy
   cancel-in-progress: false
 
 permissions:

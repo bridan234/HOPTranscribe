@@ -1,4 +1,4 @@
-name: v2 Infra (terraform plan/apply)
+name: Infra (terraform plan/apply)
 
 # Runs terraform plan or apply against infra/azure. Manual only.
 #
@@ -46,7 +46,7 @@ on:
         default: false
 
 concurrency:
-  group: v2-infra
+  group: infra
   cancel-in-progress: false
 
 permissions:

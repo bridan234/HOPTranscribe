@@ -1,4 +1,4 @@
-name: v2 CI
+name: CI
 
 on:
   push:
@@ -7,18 +7,18 @@ on:
       - 'api/**'
       - 'web/**'
       - 'infra/**'
-      - '.github/workflows/v2-ci.yml'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [v2, main]
     paths:
       - 'api/**'
       - 'web/**'
       - 'infra/**'
-      - '.github/workflows/v2-ci.yml'
+      - '.github/workflows/ci.yml'
   workflow_dispatch:
 
 concurrency:
-  group: v2-ci-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
