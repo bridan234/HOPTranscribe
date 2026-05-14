@@ -1,8 +1,34 @@
-export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL.trim() !== ''
-    ? import.meta.env.VITE_API_BASE_URL
-    : 'http://localhost:5001'
-  ).replace(/\/$/, '');
+// API base URL resolution order:
+//   1. window.__APP_CONFIG__.apiBaseUrl   — written at container start by
+//      web/docker-entrypoint.sh from the API_BASE_URL env var. This is the
+//      production path; the image is environment-agnostic.
+//   2. import.meta.env.VITE_API_BASE_URL  — build-time fallback for `vite dev`
+//      or anyone still injecting at build time.
+//   3. http://localhost:5001              — last-resort dev default.
+// In a production bundle, a missing #1 and #2 throws loudly so we never
+// silently call localhost from a deployed app (the bug behind the "API call
+// going to localhost in Container App" incident).
+const runtimeApiBaseUrl =
+  typeof window !== 'undefined' && typeof window.__APP_CONFIG__?.apiBaseUrl === 'string'
+    ? window.__APP_CONFIG__.apiBaseUrl.trim()
+    : '';
+const buildTimeApiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
+
+const resolveApiBaseUrl = (): string => {
+  if (runtimeApiBaseUrl) return runtimeApiBaseUrl;
+  if (buildTimeApiBaseUrl) return buildTimeApiBaseUrl;
+  if (import.meta.env.PROD) {
+    const msg =
+      'API base URL not configured: set window.__APP_CONFIG__.apiBaseUrl ' +
+      '(via the container env API_BASE_URL) or pass VITE_API_BASE_URL at build time.';
+    // eslint-disable-next-line no-console
+    console.error(`[HOPTranscribe] ${msg}`);
+    throw new Error(msg);
+  }
+  return 'http://localhost:5001';
+};
+
+export const API_BASE_URL = resolveApiBaseUrl().replace(/\/$/, '');
 
 export const API_ENDPOINTS = {
   auth: {

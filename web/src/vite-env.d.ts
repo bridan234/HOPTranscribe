@@ -7,3 +7,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface AppRuntimeConfig {
+  apiBaseUrl?: string | null;
+}
+
+interface Window {
+  __APP_CONFIG__?: AppRuntimeConfig;
+}

@@ -196,8 +196,11 @@ resource "azurerm_container_app" "web" {
       cpu    = var.web_cpu
       memory = var.web_memory
 
+      # API_BASE_URL is consumed at container start by web/docker-entrypoint.sh,
+      # which renders /usr/share/nginx/html/config.js. The SPA reads it from
+      # window.__APP_CONFIG__.apiBaseUrl at boot — no build-time wiring needed.
       env {
-        name  = "VITE_API_BASE_URL"
+        name  = "API_BASE_URL"
         value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
       }
     }

@@ -123,6 +123,10 @@ jobs:
         if: steps.skip.outputs.skip == 'false'
         uses: docker/setup-buildx-action@v3
 
+      # Images are environment-agnostic: API_BASE_URL is injected at *container
+      # start* by web/docker-entrypoint.sh (rendered into /config.js, picked up
+      # by window.__APP_CONFIG__). No build-arg plumbing required here — the
+      # web Container App env var in Terraform drives it at runtime.
       - name: Build & push ${{ matrix.component.name }}
         if: steps.skip.outputs.skip == 'false'
         uses: docker/build-push-action@v6
@@ -133,8 +137,6 @@ jobs:
           tags: |
             ${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.component.repo }}:${{ needs.resolve.outputs.image_tag }}
             ${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.component.repo }}:latest
-          build-args: |
-            ${{ matrix.component.name == 'web' && format('VITE_API_BASE_URL={0}', vars.API_URL) || '' }}
           cache-from: type=gha,scope=${{ matrix.component.name }}
           cache-to: type=gha,scope=${{ matrix.component.name }},mode=max
 
