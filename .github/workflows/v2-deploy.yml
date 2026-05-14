@@ -26,10 +26,10 @@ name: v2 Deploy (build → push → roll)
 
 on:
   push:
-    branches: [v2]
+    branches: [v2, main]
     paths:
-      - 'v2/api/**'
-      - 'v2/web/**'
+      - 'api/**'
+      - 'web/**'
       - '.github/workflows/v2-deploy.yml'
   workflow_dispatch:
     inputs:
@@ -91,8 +91,8 @@ jobs:
       fail-fast: false
       matrix:
         component:
-          - { name: api, context: v2/api, repo: hoptranscribe-api, port: 8080 }
-          - { name: web, context: v2/web, repo: hoptranscribe-web, port: 80 }
+          - { name: api, context: api, repo: hoptranscribe-api, port: 8080 }
+          - { name: web, context: web, repo: hoptranscribe-web, port: 80 }
     steps:
       - uses: actions/checkout@v4
 

@@ -2,14 +2,18 @@ name: v2 CI
 
 on:
   push:
-    branches: [v2]
+    branches: [v2, main]
     paths:
-      - 'v2/**'
+      - 'api/**'
+      - 'web/**'
+      - 'infra/**'
       - '.github/workflows/v2-ci.yml'
   pull_request:
     branches: [v2, main]
     paths:
-      - 'v2/**'
+      - 'api/**'
+      - 'web/**'
+      - 'infra/**'
       - '.github/workflows/v2-ci.yml'
   workflow_dispatch:
 
@@ -22,11 +26,8 @@ permissions:
 
 jobs:
   api-build:
-    name: API · build
+    name: API · build + test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: v2/api
     steps:
       - uses: actions/checkout@v4
 
@@ -40,33 +41,40 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('v2/api/**/*.csproj') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Restore
-        run: dotnet restore HOPTranscribe.Api.csproj
+      - name: Restore solution
+        run: dotnet restore HOPTranscribe.sln
 
-      - name: Build (Release)
-        run: dotnet build HOPTranscribe.Api.csproj --configuration Release --no-restore /warnaserror
+      - name: Build solution (Release)
+        run: dotnet build HOPTranscribe.sln --configuration Release --no-restore /warnaserror
 
-      # Tests are not yet present in v2 — re-enable when the test project lands.
-      # - name: Test
-      #   run: dotnet test --configuration Release --no-build --logger "trx" --results-directory TestResults
-      #
-      # - name: Upload test results
-      #   if: always()
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: api-test-results
-      #     path: v2/api/TestResults
+      - name: Test
+        run: |
+          dotnet test api.tests/HOPTranscribe.Api.Tests.csproj \
+            --configuration Release \
+            --no-build \
+            --logger "trx;LogFileName=test-results.trx" \
+            --logger "console;verbosity=normal" \
+            --results-directory api.tests/TestResults \
+            --collect "XPlat Code Coverage"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results
+          path: api.tests/TestResults
+          retention-days: 7
 
   web-build:
     name: Web · build
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: v2/web
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +83,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: v2/web/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Install
         run: npm ci
@@ -87,7 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-dist-${{ github.sha }}
-          path: v2/web/dist
+          path: web/dist
           retention-days: 7
 
   docker-build:
@@ -98,8 +106,8 @@ jobs:
       fail-fast: false
       matrix:
         component:
-          - { name: api, context: v2/api }
-          - { name: web, context: v2/web }
+          - { name: api, context: api }
+          - { name: web, context: web }
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
@@ -119,7 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: v2/infra/azure
+        working-directory: infra/azure
     steps:
       - uses: actions/checkout@v4
 

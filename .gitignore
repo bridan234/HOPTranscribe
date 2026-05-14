@@ -69,4 +69,16 @@ appsettings.Development.json
 **/override.tf.json
 **/*_override.tf
 **/*_override.tf.json
-docs/application-insights-queries.md
+
+# API runtime + .NET incremental
+api/data/
+api/logs/
+
+# Test artifacts
+api.tests/TestResults/
+**/TestResults/
+
+# Vite/TS incremental build outputs
+**/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts

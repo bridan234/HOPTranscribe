@@ -1,6 +1,6 @@
 name: v2 Infra (terraform plan/apply)
 
-# Runs terraform plan or apply against v2/infra/azure. Manual only.
+# Runs terraform plan or apply against infra/azure. Manual only.
 #
 # === Required GitHub configuration ===
 #
@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: v2/infra/azure
+        working-directory: infra/azure
     steps:
       - uses: actions/checkout@v4
 
@@ -127,7 +127,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ github.run_id }}
-          path: v2/infra/azure/plan.tfplan
+          path: infra/azure/plan.tfplan
           retention-days: 14
 
       - name: terraform apply
