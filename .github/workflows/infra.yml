@@ -8,7 +8,7 @@ name: Infra (terraform plan/apply)
 #   AZURE_CLIENT_ID
 #   AZURE_TENANT_ID
 #   AZURE_SUBSCRIPTION_ID
-#   TF_VAR_OPENAI_API_KEY        — value passed as -var openai_api_key=...
+#   OPENAI_API_KEY               — value passed as -var openai_api_key=...
 #
 # Variables:
 #   TF_BACKEND_RESOURCE_GROUP    — RG holding the tfstate storage account
@@ -114,7 +114,7 @@ jobs:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY }}
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           TF_VAR_name_prefix: ${{ vars.TF_VAR_NAME_PREFIX }}
           TF_VAR_env: ${{ vars.TF_VAR_ENV }}
           TF_VAR_location: ${{ vars.TF_VAR_LOCATION }}
@@ -137,7 +137,7 @@ jobs:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY }}
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           TF_VAR_name_prefix: ${{ vars.TF_VAR_NAME_PREFIX }}
           TF_VAR_env: ${{ vars.TF_VAR_ENV }}
           TF_VAR_location: ${{ vars.TF_VAR_LOCATION }}
@@ -158,7 +158,7 @@ jobs:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_openai_api_key: ${{ secrets.TF_VAR_OPENAI_API_KEY }}
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           TF_VAR_name_prefix: ${{ vars.TF_VAR_NAME_PREFIX }}
           TF_VAR_env: ${{ vars.TF_VAR_ENV }}
           TF_VAR_location: ${{ vars.TF_VAR_LOCATION }}

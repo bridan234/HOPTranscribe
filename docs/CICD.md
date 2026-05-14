@@ -80,7 +80,7 @@ az role assignment create --assignee-object-id "$SP_OBJECT_ID" --assignee-princi
 | `AZURE_CLIENT_ID` | `$APP_ID` |
 | `AZURE_TENANT_ID` | `az account show --query tenantId -o tsv` |
 | `AZURE_SUBSCRIPTION_ID` | `$SUB_ID` |
-| `TF_VAR_OPENAI_API_KEY` | your OpenAI API key |
+| `OPENAI_API_KEY` | your OpenAI API key (re-used by `infra.yml` as `TF_VAR_openai_api_key`) |
 
 **Repository variables** (`Settings → Secrets and variables → Actions → Variables`):
 
