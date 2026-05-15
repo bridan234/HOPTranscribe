@@ -17,16 +17,58 @@ public class TranscriptionSessionResponse
     public string Language { get; set; } = "en";
 }
 
-internal class OpenAITranscriptionSessionPayload
+internal class OpenAIRealtimeClientSecretRequest
 {
-    [JsonPropertyName("input_audio_format")]
-    public string InputAudioFormat { get; set; } = "pcm16";
+    [JsonPropertyName("expires_after")]
+    public OpenAIClientSecretExpiry ExpiresAfter { get; set; } = new();
 
-    [JsonPropertyName("input_audio_transcription")]
-    public OpenAIInputAudioTranscription InputAudioTranscription { get; set; } = new();
+    [JsonPropertyName("session")]
+    public OpenAIRealtimeTranscriptionSession Session { get; set; } = new();
+}
+
+internal class OpenAIClientSecretExpiry
+{
+    [JsonPropertyName("anchor")]
+    public string Anchor { get; set; } = "created_at";
+
+    [JsonPropertyName("seconds")]
+    public int Seconds { get; set; } = 600;
+}
+
+internal class OpenAIRealtimeTranscriptionSession
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "transcription";
+
+    [JsonPropertyName("audio")]
+    public OpenAIRealtimeTranscriptionAudio Audio { get; set; } = new();
+}
+
+internal class OpenAIRealtimeTranscriptionAudio
+{
+    [JsonPropertyName("input")]
+    public OpenAIRealtimeTranscriptionAudioInput Input { get; set; } = new();
+}
+
+internal class OpenAIRealtimeTranscriptionAudioInput
+{
+    [JsonPropertyName("format")]
+    public OpenAIPcmAudioFormat Format { get; set; } = new();
+
+    [JsonPropertyName("transcription")]
+    public OpenAIInputAudioTranscription Transcription { get; set; } = new();
 
     [JsonPropertyName("turn_detection")]
-    public OpenAITurnDetection TurnDetection { get; set; } = new();
+    public OpenAITurnDetection? TurnDetection { get; set; } = new();
+}
+
+internal class OpenAIPcmAudioFormat
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "audio/pcm";
+
+    [JsonPropertyName("rate")]
+    public int Rate { get; set; } = 24000;
 }
 
 internal class OpenAIInputAudioTranscription
@@ -53,20 +95,20 @@ internal class OpenAITurnDetection
     public int SilenceDurationMs { get; set; } = 500;
 }
 
-internal class OpenAITranscriptionSessionResponse
-{
-    [JsonPropertyName("id")]
-    public string? Id { get; set; }
-
-    [JsonPropertyName("client_secret")]
-    public OpenAIClientSecret? ClientSecret { get; set; }
-}
-
-internal class OpenAIClientSecret
+internal class OpenAIRealtimeClientSecretResponse
 {
     [JsonPropertyName("value")]
     public string? Value { get; set; }
 
     [JsonPropertyName("expires_at")]
     public long ExpiresAt { get; set; }
+
+    [JsonPropertyName("session")]
+    public OpenAIRealtimeClientSecretSession? Session { get; set; }
+}
+
+internal class OpenAIRealtimeClientSecretSession
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
 }

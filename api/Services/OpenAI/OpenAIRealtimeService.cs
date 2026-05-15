@@ -9,7 +9,7 @@ namespace HOPTranscribe.Api.Services.OpenAI;
 
 public class OpenAIRealtimeService : IOpenAIRealtimeService
 {
-    private const string TranscriptionSessionsPath = "/v1/realtime/transcription_sessions";
+    private const string ClientSecretsPath = "/v1/realtime/client_secrets";
     private const string RealtimeCallsPath = "/v1/realtime/calls";
 
     private readonly HttpClient _http;
@@ -32,12 +32,22 @@ public class OpenAIRealtimeService : IOpenAIRealtimeService
 
     public async Task<TranscriptionSessionResponse> CreateTranscriptionSessionAsync(string language, CancellationToken ct = default)
     {
-        var payload = new OpenAITranscriptionSessionPayload
+        var normalizedLanguage = string.IsNullOrWhiteSpace(language) ? "en" : language;
+        var payload = new OpenAIRealtimeClientSecretRequest
         {
-            InputAudioTranscription = new OpenAIInputAudioTranscription
+            Session = new OpenAIRealtimeTranscriptionSession
             {
-                Model = _settings.TranscriptionModel,
-                Language = string.IsNullOrWhiteSpace(language) ? "en" : language,
+                Audio = new OpenAIRealtimeTranscriptionAudio
+                {
+                    Input = new OpenAIRealtimeTranscriptionAudioInput
+                    {
+                        Transcription = new OpenAIInputAudioTranscription
+                        {
+                            Model = _settings.TranscriptionModel,
+                            Language = normalizedLanguage,
+                        },
+                    },
+                },
             },
         };
 
@@ -45,9 +55,9 @@ public class OpenAIRealtimeService : IOpenAIRealtimeService
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         _logger.LogInformation("Creating OpenAI transcription session (model={Model}, language={Language})",
-            _settings.TranscriptionModel, language);
+            _settings.TranscriptionModel, normalizedLanguage);
 
-        using var response = await _http.PostAsync(TranscriptionSessionsPath, content, ct);
+        using var response = await _http.PostAsync(ClientSecretsPath, content, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
@@ -57,27 +67,27 @@ public class OpenAIRealtimeService : IOpenAIRealtimeService
                 $"OpenAI transcription session request failed with status {(int)response.StatusCode}.");
         }
 
-        var parsed = JsonSerializer.Deserialize<OpenAITranscriptionSessionResponse>(body);
-        if (parsed?.ClientSecret?.Value is null)
+        var parsed = JsonSerializer.Deserialize<OpenAIRealtimeClientSecretResponse>(body);
+        if (parsed?.Value is null)
         {
-            _logger.LogError("OpenAI transcription session response missing client_secret: {Body}", body);
-            throw new InvalidOperationException("OpenAI did not return a client_secret.");
+            _logger.LogError("OpenAI client secret response missing value: {Body}", body);
+            throw new InvalidOperationException("OpenAI did not return a client secret.");
         }
 
-        var expiresAt = parsed.ClientSecret.ExpiresAt > 0
-            ? DateTimeOffset.FromUnixTimeSeconds(parsed.ClientSecret.ExpiresAt)
-            : DateTimeOffset.UtcNow.AddMinutes(1);
+        var expiresAt = parsed.ExpiresAt > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(parsed.ExpiresAt)
+            : DateTimeOffset.UtcNow.AddMinutes(10);
 
-        var sdpUrl = new Uri(new Uri(_settings.BaseUrl), $"{RealtimeCallsPath}?model={Uri.EscapeDataString(_settings.TranscriptionModel)}").ToString();
+        var sdpUrl = new Uri(new Uri(_settings.BaseUrl), RealtimeCallsPath).ToString();
 
         return new TranscriptionSessionResponse
         {
-            ClientSecret = parsed.ClientSecret.Value,
+            ClientSecret = parsed.Value,
             ExpiresAt = expiresAt,
             Model = _settings.TranscriptionModel,
             SdpUrl = sdpUrl,
-            SessionId = parsed.Id ?? string.Empty,
-            Language = language,
+            SessionId = parsed.Session?.Id ?? string.Empty,
+            Language = normalizedLanguage,
         };
     }
 }
