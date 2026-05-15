@@ -59,7 +59,7 @@ internal class OpenAIRealtimeTranscriptionAudioInput
     public OpenAIInputAudioTranscription Transcription { get; set; } = new();
 
     [JsonPropertyName("turn_detection")]
-    public OpenAITurnDetection? TurnDetection { get; set; } = new();
+    public OpenAITurnDetection? TurnDetection { get; set; }
 }
 
 internal class OpenAIPcmAudioFormat
