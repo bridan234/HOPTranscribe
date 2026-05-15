@@ -34,13 +34,10 @@ public class OpenAIRealtimeService : IOpenAIRealtimeService
     {
         var payload = new OpenAITranscriptionSessionPayload
         {
-            Session = new OpenAITranscriptionSession
+            InputAudioTranscription = new OpenAIInputAudioTranscription
             {
-                InputAudioTranscription = new OpenAIInputAudioTranscription
-                {
-                    Model = _settings.TranscriptionModel,
-                    Language = string.IsNullOrWhiteSpace(language) ? "en" : language,
-                },
+                Model = _settings.TranscriptionModel,
+                Language = string.IsNullOrWhiteSpace(language) ? "en" : language,
             },
         };
 

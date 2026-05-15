@@ -19,15 +19,6 @@ public class TranscriptionSessionResponse
 
 internal class OpenAITranscriptionSessionPayload
 {
-    [JsonPropertyName("session")]
-    public OpenAITranscriptionSession Session { get; set; } = new();
-}
-
-internal class OpenAITranscriptionSession
-{
-    [JsonPropertyName("type")]
-    public string Type { get; set; } = "transcription";
-
     [JsonPropertyName("input_audio_format")]
     public string InputAudioFormat { get; set; } = "pcm16";
 

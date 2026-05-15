@@ -42,18 +42,26 @@ export async function connectRealtime(opts: ConnectOptions): Promise<RealtimeCon
   dataChannel.addEventListener('open', () => {
     dataChannel.send(
       JSON.stringify({
-        type: 'transcription_session.update',
+        type: 'session.update',
         session: {
-          input_audio_format: 'pcm16',
-          input_audio_transcription: {
-            model: session.model,
-            language: session.language,
-          },
-          turn_detection: {
-            type: 'server_vad',
-            threshold: 0.5,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 500,
+          type: 'transcription',
+          audio: {
+            input: {
+              format: {
+                type: 'audio/pcm',
+                rate: 24000,
+              },
+              transcription: {
+                model: session.model,
+                language: session.language,
+              },
+              turn_detection: {
+                type: 'server_vad',
+                threshold: 0.5,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 500,
+              },
+            },
           },
         },
       }),

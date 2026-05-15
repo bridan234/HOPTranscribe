@@ -13,6 +13,25 @@ locals {
   # via image_tag and let terraform apply roll the revision.
   api_image = "${azurerm_container_registry.this.login_server}/${var.api_image_repository}:${var.image_tag}"
   web_image = "${azurerm_container_registry.this.login_server}/${var.web_image_repository}:${var.image_tag}"
+
+  # Versionless Key Vault refs do not automatically roll Container App revisions
+  # when the underlying secret value changes. Pin revision suffixes to the secret
+  # versions/runtime config so terraform apply creates a fresh revision after a
+  # DB password/host rotation or other KV-backed secret update.
+  api_revision_suffix = "cfg-${substr(sha256(join("|", [
+    azurerm_key_vault_secret.openai_api_key.version,
+    azurerm_key_vault_secret.jwt_signing_key.version,
+    azurerm_key_vault_secret.db_connection_string.version,
+    azurerm_application_insights.this.connection_string,
+    var.allowed_origins,
+    var.realtime_model,
+    var.matching_model,
+    var.matching_fallback_model,
+  ])), 0, 12)}"
+
+  web_revision_suffix = "cfg-${substr(sha256(join("|", [
+    azurerm_container_app.api.ingress[0].fqdn,
+  ])), 0, 12)}"
 }
 
 resource "azurerm_container_app" "api" {
@@ -51,8 +70,9 @@ resource "azurerm_container_app" "api" {
   }
 
   template {
-    min_replicas = var.api_min_replicas
-    max_replicas = var.api_max_replicas
+    revision_suffix = local.api_revision_suffix
+    min_replicas    = var.api_min_replicas
+    max_replicas    = var.api_max_replicas
 
     container {
       name   = "api"
@@ -173,8 +193,9 @@ resource "azurerm_container_app" "web" {
   }
 
   template {
-    min_replicas = var.web_min_replicas
-    max_replicas = var.web_max_replicas
+    revision_suffix = local.web_revision_suffix
+    min_replicas    = var.web_min_replicas
+    max_replicas    = var.web_max_replicas
 
     container {
       name   = "web"
