@@ -21,15 +21,16 @@ locals {
   base_compact = lower(replace(local.base, "-", ""))
 
   names = {
-    rg      = "rg-${local.base}"
-    acr     = substr("cr${local.base_compact}${local.suffix}", 0, 50)
-    kv      = substr("kv-${local.base}-${local.suffix}", 0, 24)
-    uami    = "id-${local.base}"
-    law     = "log-${local.base}"
-    appi    = "appi-${local.base}"
-    cae     = "cae-${local.base}"
-    api_app = "ca-${local.base}-api"
-    web_app = "ca-${local.base}-web"
+    rg            = "rg-${local.base}"
+    acr           = substr("cr${local.base_compact}${local.suffix}", 0, 50)
+    kv            = substr("kv-${local.base}-${local.suffix}", 0, 24)
+    uami          = "id-${local.base}"
+    law           = "log-${local.base}"
+    appi          = "appi-${local.base}"
+    cae           = "cae-${local.base}"
+    api_app       = "ca-${local.base}-api"
+    web_app       = "ca-${local.base}-web"
+    keepalive_job = "job-${local.base}-keepalive"
   }
 
   effective_jwt_signing_key = coalesce(var.jwt_signing_key, try(random_password.jwt[0].result, ""))

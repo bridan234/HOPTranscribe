@@ -25,14 +25,22 @@ name: Deploy (build → push → roll)
 #     "subject":"repo:<owner>/<repo>:ref:refs/heads/v2","audiences":["api://AzureADTokenExchange"]}'
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [v2, main]
-    paths:
-      - 'api/**'
-      - 'web/**'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
     inputs:
+      ci_run_id:
+        description: 'Successful CI run URL or ID to deploy (required for manual deploys)'
+        type: string
+        required: false
+      trigger_source:
+        description: 'Who triggered this deploy'
+        type: choice
+        options: [manual, ci, infra]
+        default: manual
+        required: false
       image_tag:
         description: 'Image tag to push (defaults to short git SHA)'
         type: string
@@ -50,19 +58,68 @@ concurrency:
 permissions:
   id-token: write
   contents: read
+  actions: read
 
 jobs:
   resolve:
     name: Resolve metadata
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     outputs:
       image_tag: ${{ steps.tag.outputs.tag }}
       build_api: ${{ steps.scope.outputs.build_api }}
       build_web: ${{ steps.scope.outputs.build_web }}
+      checkout_ref: ${{ steps.source.outputs.checkout_ref }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - id: source
+        name: Resolve deploy source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          event_name="${{ github.event_name }}"
+          trigger_source="${{ inputs.trigger_source || 'manual' }}"
+          ci_run_ref="${{ inputs.ci_run_id }}"
+
+          if [ "$event_name" = "workflow_run" ]; then
+            head_sha="${{ github.event.workflow_run.head_sha }}"
+            url="${{ github.event.workflow_run.html_url }}"
+            run_id="${{ github.event.workflow_run.id }}"
+            echo "Deploying successful CI run $run_id ($url) at $head_sha"
+            echo "checkout_ref=$head_sha" >> "$GITHUB_OUTPUT"
+          elif [ "$trigger_source" = "manual" ] || [ "$trigger_source" = "ci" ]; then
+            if [ -z "$ci_run_ref" ]; then
+              echo "::error::ci_run_id is required for $trigger_source deploys. Pass a successful CI run URL or ID."
+              exit 1
+            fi
+
+            ci_run_id="$(printf '%s' "$ci_run_ref" | sed -E 's#^.*/actions/runs/([0-9]+).*$#\1#')"
+            if ! printf '%s' "$ci_run_id" | grep -Eq '^[0-9]+$'; then
+              echo "::error::Invalid ci_run_id '$ci_run_ref'. Use a CI run URL or numeric run ID."
+              exit 1
+            fi
+
+            name="$(gh run view "$ci_run_id" --json name --jq '.name')"
+            conclusion="$(gh run view "$ci_run_id" --json conclusion --jq '.conclusion')"
+            head_sha="$(gh run view "$ci_run_id" --json headSha --jq '.headSha')"
+            url="$(gh run view "$ci_run_id" --json url --jq '.url')"
+
+            if [ "$name" != "CI" ]; then
+              echo "::error::Run $ci_run_id is '$name', not CI."
+              exit 1
+            fi
+            if [ "$conclusion" != "success" ]; then
+              echo "::error::CI run $ci_run_id has conclusion '$conclusion', not success."
+              exit 1
+            fi
+
+            echo "Deploying CI run $ci_run_id ($url) at $head_sha"
+            echo "checkout_ref=$head_sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "Deploying current workflow ref $GITHUB_SHA after infra apply"
+            echo "checkout_ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          fi
 
       - id: tag
         name: Compute image tag
@@ -70,7 +127,7 @@ jobs:
           if [ -n "${{ inputs.image_tag }}" ]; then
             echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+            echo "tag=$(printf '%s' '${{ steps.source.outputs.checkout_ref }}' | cut -c1-12)" >> "$GITHUB_OUTPUT"
           fi
 
       - id: scope
@@ -95,6 +152,8 @@ jobs:
           - { name: web, context: web, repo: hoptranscribe-web, port: 80 }
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.checkout_ref }}
 
       - name: Skip if not in scope
         id: skip

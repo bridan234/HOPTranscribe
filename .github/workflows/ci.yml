@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [v2, main]
+    branches: [main]
     paths:
       - 'api/**'
       - 'web/**'
@@ -145,3 +145,4 @@ jobs:
 
       - name: terraform validate
         run: terraform validate
+

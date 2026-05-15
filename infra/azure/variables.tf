@@ -179,3 +179,21 @@ variable "db_name" {
   type        = string
   default     = "postgres"
 }
+
+variable "keepalive_enabled" {
+  description = "Create a scheduled Container Apps job that touches the API daily so Supabase does not pause for inactivity."
+  type        = bool
+  default     = true
+}
+
+variable "keepalive_cron_expression" {
+  description = "Cron expression for the Supabase keepalive Container Apps job. Uses Container Apps cron semantics."
+  type        = string
+  default     = "17 8 * * *"
+}
+
+variable "keepalive_image" {
+  description = "Container image used by the Supabase keepalive job."
+  type        = string
+  default     = "curlimages/curl:latest"
+}
