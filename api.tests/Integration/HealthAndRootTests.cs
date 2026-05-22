@@ -23,13 +23,30 @@ public class HealthAndRootTests : IClassFixture<HopApiFactory>
         var checks = json.RootElement.GetProperty("checks").EnumerateArray().ToList();
         checks.Select(x => x.GetProperty("name").GetString())
             .Should()
-            .Contain(new[] { "database", "storage", "openai" });
+            .BeEquivalentTo(new[] { "database", "storage" });
         checks.Select(x => x.GetProperty("description").GetString())
             .Should()
             .OnlyContain(x => x == "Check passed.");
         checks.Select(x => x.GetProperty("error").ValueKind)
             .Should()
             .OnlyContain(x => x == JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Dependency_Health_Endpoint_Includes_External_Checks()
+    {
+        var client = _factory.CreateClient();
+        var resp = await client.GetAsync("/health/dependencies");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await resp.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+
+        json.RootElement.GetProperty("status").GetString().Should().Be("Healthy");
+        var checks = json.RootElement.GetProperty("checks").EnumerateArray().ToList();
+        checks.Select(x => x.GetProperty("name").GetString())
+            .Should()
+            .Contain(new[] { "database", "storage", "openai" });
     }
 
     [Fact]

@@ -155,7 +155,7 @@ builder.Services.AddHttpClient("openai-health");
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
     .AddCheck<SqliteStorageHealthCheck>("storage", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
-    .AddCheck<OpenAIHealthCheck>("openai", failureStatus: HealthStatus.Unhealthy, tags: new[] { "external", "ready" });
+    .AddCheck<OpenAIHealthCheck>("openai", failureStatus: HealthStatus.Unhealthy, tags: new[] { "external" });
 
 var aiConn = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
 if (!string.IsNullOrWhiteSpace(aiConn))
@@ -264,6 +264,11 @@ app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<SessionHub>("/sessionHub");
 app.MapHealthChecks("/health/status", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthReport,
+});
+app.MapHealthChecks("/health/dependencies", new HealthCheckOptions
 {
     ResponseWriter = WriteHealthReport,
 });
