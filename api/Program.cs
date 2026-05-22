@@ -1,7 +1,9 @@
+using System.Text.Json;
 using System.Text;
 using System.Threading.RateLimiting;
 using HOPTranscribe.Api.Configuration;
 using HOPTranscribe.Api.Data;
+using HOPTranscribe.Api.HealthChecks;
 using HOPTranscribe.Api.Hubs;
 using HOPTranscribe.Api.Middleware;
 using HOPTranscribe.Api.Services.Auth;
@@ -11,8 +13,10 @@ using HOPTranscribe.Api.Services.OpenAI;
 using HOPTranscribe.Api.Services.Sessions;
 using HOPTranscribe.Api.Validation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -147,7 +151,11 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
-builder.Services.AddHealthChecks();
+builder.Services.AddHttpClient("openai-health");
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<SqliteStorageHealthCheck>("storage", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<OpenAIHealthCheck>("openai", failureStatus: HealthStatus.Unhealthy, tags: new[] { "external", "ready" });
 
 var aiConn = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
 if (!string.IsNullOrWhiteSpace(aiConn))
@@ -210,6 +218,31 @@ static string SqliteDataSourcePath(string cs)
     return string.Empty;
 }
 
+static Task WriteHealthReport(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+
+    var payload = new
+    {
+        status = report.Status.ToString(),
+        durationMs = report.TotalDuration.TotalMilliseconds,
+        checks = report.Entries.Select(entry => new
+        {
+            name = entry.Key,
+            status = entry.Value.Status.ToString(),
+            description = entry.Value.Description,
+            durationMs = entry.Value.Duration.TotalMilliseconds,
+            error = entry.Value.Exception?.Message,
+            data = entry.Value.Data,
+        }),
+    };
+
+    return JsonSerializer.SerializeAsync(
+        context.Response.Body,
+        payload,
+        new JsonSerializerOptions { WriteIndented = true });
+}
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSerilogRequestLogging();
 
@@ -226,7 +259,10 @@ app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHub<SessionHub>("/sessionHub");
-app.MapHealthChecks("/health/status");
+app.MapHealthChecks("/health/status", new HealthCheckOptions
+{
+    ResponseWriter = WriteHealthReport,
+});
 app.MapGet("/", () => Results.Ok(new { service = "HOPTranscribe.Api", version = "v2.0.0" }));
 
 try

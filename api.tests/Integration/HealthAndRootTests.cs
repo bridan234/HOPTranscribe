@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 
 namespace HOPTranscribe.Api.Tests.Integration;
 
@@ -14,6 +15,15 @@ public class HealthAndRootTests : IClassFixture<HopApiFactory>
         var client = _factory.CreateClient();
         var resp = await client.GetAsync("/health/status");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await resp.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+
+        json.RootElement.GetProperty("status").GetString().Should().Be("Healthy");
+        var checks = json.RootElement.GetProperty("checks").EnumerateArray().ToList();
+        checks.Select(x => x.GetProperty("name").GetString())
+            .Should()
+            .Contain(new[] { "database", "storage", "openai" });
     }
 
     [Fact]

@@ -49,6 +49,7 @@ public class HopApiFactory : WebApplicationFactory<Program>
                 ["OpenAI:RealtimeModel"] = "gpt-realtime-whisper",
                 ["OpenAI:MatchingModel"] = "gpt-5-mini",
                 ["OpenAI:MatchingFallbackModel"] = "gpt-4o-mini",
+                ["HealthChecks:OpenAI:Enabled"] = "false",
                 ["RateLimits:MatchPerSessionPerMinute"] = "1000",
                 ["ConnectionStrings:SessionDb"] = "DataSource=:memory:",
                 ["AllowedOrigins:0"] = "http://localhost",
