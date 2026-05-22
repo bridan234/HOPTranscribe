@@ -40,19 +40,31 @@ public class SqliteStorageHealthCheck : IHealthCheck
             directory = Directory.GetCurrentDirectory();
         }
 
+        var probePath = Path.Combine(directory, $".hoptranscribe-health-{Guid.NewGuid():N}.tmp");
         try
         {
             Directory.CreateDirectory(directory);
-
-            var probePath = Path.Combine(directory, $".hoptranscribe-health-{Guid.NewGuid():N}.tmp");
             await File.WriteAllTextAsync(probePath, "ok", cancellationToken);
-            File.Delete(probePath);
 
             return HealthCheckResult.Healthy("SQLite storage directory is writable.");
         }
         catch (Exception ex)
         {
             return HealthCheckResult.Unhealthy($"SQLite storage directory is not writable: {directory}", ex);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(probePath))
+                {
+                    File.Delete(probePath);
+                }
+            }
+            catch
+            {
+                // Best-effort cleanup: preserve the original probe result.
+            }
         }
     }
 
