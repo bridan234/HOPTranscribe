@@ -24,6 +24,12 @@ public class HealthAndRootTests : IClassFixture<HopApiFactory>
         checks.Select(x => x.GetProperty("name").GetString())
             .Should()
             .Contain(new[] { "database", "storage", "openai" });
+        checks.Select(x => x.GetProperty("description").GetString())
+            .Should()
+            .OnlyContain(x => x == "Check passed.");
+        checks.Select(x => x.GetProperty("error").ValueKind)
+            .Should()
+            .OnlyContain(x => x == JsonValueKind.Null);
     }
 
     [Fact]

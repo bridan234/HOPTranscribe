@@ -221,6 +221,8 @@ static string SqliteDataSourcePath(string cs)
 static Task WriteHealthReport(HttpContext context, HealthReport report)
 {
     context.Response.ContentType = "application/json";
+    var environment = context.RequestServices.GetRequiredService<IHostEnvironment>();
+    var includeDetails = environment.IsDevelopment();
 
     var payload = new
     {
@@ -230,10 +232,12 @@ static Task WriteHealthReport(HttpContext context, HealthReport report)
         {
             name = entry.Key,
             status = entry.Value.Status.ToString(),
-            description = entry.Value.Description,
+            description = includeDetails
+                ? entry.Value.Description
+                : entry.Value.Status == HealthStatus.Healthy ? "Check passed." : "Check failed.",
             durationMs = entry.Value.Duration.TotalMilliseconds,
-            error = entry.Value.Exception?.Message,
-            data = entry.Value.Data,
+            error = includeDetails ? entry.Value.Exception?.Message : null,
+            data = includeDetails ? entry.Value.Data : null,
         }),
     };
 
