@@ -76,12 +76,11 @@ public class ScriptureMatchService : IScriptureMatchService
     private async Task<(MatchResponse? response, string modelUsed)> CallModelAsync(
         string model, string utterance, string preferredVersion, int n, CancellationToken ct)
     {
-        var body = new
+        var body = new Dictionary<string, object?>
         {
-            model,
-            temperature = _settings.MatchingTemperature,
-            max_completion_tokens = _settings.MatchingMaxOutputTokens,
-            response_format = new
+            ["model"] = model,
+            ["max_completion_tokens"] = _settings.MatchingMaxOutputTokens,
+            ["response_format"] = new
             {
                 type = "json_schema",
                 json_schema = new
@@ -91,12 +90,25 @@ public class ScriptureMatchService : IScriptureMatchService
                     schema = JsonDocument.Parse(Prompts.ScriptureMatchJsonSchema).RootElement,
                 },
             },
-            messages = new object[]
+            ["messages"] = new object[]
             {
                 new { role = "system", content = Prompts.ScriptureMatchSystemPrompt },
                 new { role = "user", content = Prompts.BuildUserPrompt(utterance, preferredVersion, n) },
             },
         };
+
+        // gpt-5 / o-series reasoning models only accept the default temperature (1)
+        // and reject an explicit non-default value, so only set it where supported.
+        if (SupportsCustomTemperature(model))
+        {
+            body["temperature"] = _settings.MatchingTemperature;
+        }
+        else
+        {
+            // Keep reasoning models snappy and stop reasoning tokens from eating the
+            // whole completion budget (which would yield an empty JSON response).
+            body["reasoning_effort"] = "minimal";
+        }
 
         var json = JsonSerializer.Serialize(body);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -143,4 +155,10 @@ public class ScriptureMatchService : IScriptureMatchService
             return (null, model);
         }
     }
+
+    private static bool SupportsCustomTemperature(string model)
+        => !(model.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase)
+             || model.StartsWith("o1", StringComparison.OrdinalIgnoreCase)
+             || model.StartsWith("o3", StringComparison.OrdinalIgnoreCase)
+             || model.StartsWith("o4", StringComparison.OrdinalIgnoreCase));
 }

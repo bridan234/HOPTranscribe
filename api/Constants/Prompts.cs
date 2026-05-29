@@ -41,7 +41,7 @@ Return ONLY the JSON object matching the provided schema. No prose, no markdown.
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["reference", "book", "chapter", "verseStart", "version", "quote", "confidence"],
+        "required": ["reference", "book", "chapter", "verseStart", "verseEnd", "version", "quote", "confidence"],
         "properties": {
           "reference": { "type": "string" },
           "book": { "type": "string" },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,8 @@ import { useSettings } from '@/hooks/useSettings';
 import { sessionService } from '@/services/sessionService';
 import type { SessionDto, TranscriptSegmentDto } from '@/types/api';
 
+export type ScrollTarget = { id: string; nonce: number } | null;
+
 interface SessionViewProps {
   session: SessionDto;
   username: string;
@@ -25,6 +27,26 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
   const isOwner = session.ownerUsername.toLowerCase() === username.toLowerCase();
   const [segments, setSegments] = useState<TranscriptSegmentDto[]>([]);
   const [partial, setPartial] = useState('');
+  const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  // `nonce` lets repeated clicks on the same segment re-trigger the scroll effect.
+  const [transcriptScrollTarget, setTranscriptScrollTarget] = useState<ScrollTarget>(null);
+  const [refScrollTarget, setRefScrollTarget] = useState<ScrollTarget>(null);
+  const nonceRef = useRef(0);
+
+  // Clicking a transcript segment reveals its scripture card in the other panel.
+  const focusFromTranscript = useCallback((segmentId: string) => {
+    nonceRef.current += 1;
+    setSelectedSegmentId(segmentId);
+    setRefScrollTarget({ id: segmentId, nonce: nonceRef.current });
+  }, []);
+
+  // Clicking a scripture card reveals its source transcript segment.
+  const focusFromReference = useCallback((segmentId: string) => {
+    nonceRef.current += 1;
+    setSelectedSegmentId(segmentId);
+    setTranscriptScrollTarget({ id: segmentId, nonce: nonceRef.current });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,7 +115,8 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
       let matches: TranscriptSegmentDto['matches'] = [];
       try {
         const result = await requestMatches(text);
-        matches = result.matches;
+        // Keep at most `matchCount` references per transcript segment.
+        matches = result.matches.slice(0, settings.matchCount);
         if (result.error) {
           toast.error(`Match error: ${result.error.message}`);
         }
@@ -122,13 +145,14 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
         toast.error(err instanceof Error ? err.message : 'Failed to save transcript.');
       }
     },
-    [requestMatches, session.code],
+    [requestMatches, session.code, settings.matchCount],
   );
 
   const realtime = useRealtimeWebRTC({
     onDelta: (delta) => setPartial(delta.text),
     onUtterance: handleUtterance,
     onError: (err) => toast.error(err.message),
+    silenceMs: Math.round(settings.silenceSeconds * 1000),
   });
 
   useEffect(() => () => cancelMatches(), [cancelMatches]);
@@ -156,6 +180,9 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
               <button onClick={copyCode} className="font-mono font-semibold text-foreground hover:underline">
                 {session.code}
               </button>
+              <span className="text-muted-foreground/50">·</span>
+              <span>Preacher</span>
+              <span className="font-semibold text-foreground">{session.ownerUsername}</span>
               <Badge variant="outline">{session.status}</Badge>
               <Badge variant={isOwner ? 'default' : 'secondary'}>{isOwner ? 'Owner' : 'Viewer'}</Badge>
             </div>
@@ -181,6 +208,12 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
             segments={segments}
             partialText={partial}
             autoScroll={settings.autoScroll}
+            isLive={realtime.state === 'recording'}
+            hoveredSegmentId={hoveredSegmentId}
+            selectedSegmentId={selectedSegmentId}
+            scrollTarget={transcriptScrollTarget}
+            onSegmentHover={setHoveredSegmentId}
+            onSegmentClick={focusFromTranscript}
           />
         </div>
         <div className="h-[70vh]">
@@ -188,6 +221,11 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
             segments={segments}
             showConfidence={settings.showConfidence}
             minConfidence={settings.minConfidence}
+            hoveredSegmentId={hoveredSegmentId}
+            selectedSegmentId={selectedSegmentId}
+            scrollTarget={refScrollTarget}
+            onSegmentHover={setHoveredSegmentId}
+            onSegmentClick={focusFromReference}
           />
         </div>
       </main>

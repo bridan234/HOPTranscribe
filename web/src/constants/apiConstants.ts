@@ -53,6 +53,8 @@ export const STORAGE_KEYS = {
   showConfidence: 'hoptranscribe.v2.showConfidence',
   autoScroll: 'hoptranscribe.v2.autoScroll',
   minConfidence: 'hoptranscribe.v2.minConfidence',
+  matchCount: 'hoptranscribe.v2.matchCount',
+  silenceSeconds: 'hoptranscribe.v2.silenceSeconds',
 } as const;
 
 export const DEFAULTS = {
@@ -60,5 +62,13 @@ export const DEFAULTS = {
   language: 'en',
   matchCount: 3,
   minConfidence: 0.4,
-  bibleVersions: ['NKJV', 'NIV', 'ESV', 'KJV', 'NLT', 'NASB', 'AMP', 'MSG'],
+  silenceSeconds: 1,
+  bibleVersions: ['NKJV', 'NIV', 'ESV', 'NLT', 'NASB', 'AMP', 'MSG', 'TPT'],
 } as const;
+
+// Bounds for the silence gap that splits one utterance from the next.
+export const SILENCE_SECONDS_MIN = 0.5;
+export const SILENCE_SECONDS_MAX = 5;
+// Bounds for how many scripture references each utterance may surface.
+export const MATCH_COUNT_MIN = 1;
+export const MATCH_COUNT_MAX = 5;

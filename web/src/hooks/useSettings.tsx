@@ -5,6 +5,7 @@ export interface AppSettings {
   preferredVersion: string;
   minConfidence: number;
   matchCount: number;
+  silenceSeconds: number;
   autoScroll: boolean;
   showConfidence: boolean;
 }
@@ -13,6 +14,7 @@ const defaultSettings: AppSettings = {
   preferredVersion: DEFAULTS.preferredVersion,
   minConfidence: DEFAULTS.minConfidence,
   matchCount: DEFAULTS.matchCount,
+  silenceSeconds: DEFAULTS.silenceSeconds,
   autoScroll: true,
   showConfidence: true,
 };
@@ -50,7 +52,8 @@ function loadSettings(): AppSettings {
   return {
     preferredVersion: readString(STORAGE_KEYS.preferredVersion, defaultSettings.preferredVersion),
     minConfidence: readNumber(STORAGE_KEYS.minConfidence, defaultSettings.minConfidence),
-    matchCount: defaultSettings.matchCount,
+    matchCount: readNumber(STORAGE_KEYS.matchCount, defaultSettings.matchCount),
+    silenceSeconds: readNumber(STORAGE_KEYS.silenceSeconds, defaultSettings.silenceSeconds),
     autoScroll: readBool(STORAGE_KEYS.autoScroll, defaultSettings.autoScroll),
     showConfidence: readBool(STORAGE_KEYS.showConfidence, defaultSettings.showConfidence),
   };
@@ -60,6 +63,8 @@ function persistSettings(s: AppSettings) {
   try {
     localStorage.setItem(STORAGE_KEYS.preferredVersion, s.preferredVersion);
     localStorage.setItem(STORAGE_KEYS.minConfidence, String(s.minConfidence));
+    localStorage.setItem(STORAGE_KEYS.matchCount, String(s.matchCount));
+    localStorage.setItem(STORAGE_KEYS.silenceSeconds, String(s.silenceSeconds));
     localStorage.setItem(STORAGE_KEYS.autoScroll, String(s.autoScroll));
     localStorage.setItem(STORAGE_KEYS.showConfidence, String(s.showConfidence));
   } catch {

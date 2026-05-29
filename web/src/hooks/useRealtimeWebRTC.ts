@@ -15,17 +15,24 @@ interface UseRealtimeWebRTCOptions {
   onError?: (error: Error) => void;
   onReconnect?: (attempt: number) => void;
   maxRetries?: number;
+  /** Trailing silence (ms) before an utterance is committed. */
+  silenceMs?: number;
 }
 
 const RETRY_DELAYS_MS = [1000, 3000, 9000];
 
 export function useRealtimeWebRTC(opts: UseRealtimeWebRTCOptions = {}) {
-  const { onUtterance, onDelta, onError, onReconnect, maxRetries = RETRY_DELAYS_MS.length } = opts;
+  const { onUtterance, onDelta, onError, onReconnect, maxRetries = RETRY_DELAYS_MS.length, silenceMs } = opts;
+
+  const silenceMsRef = useRef(silenceMs);
+  silenceMsRef.current = silenceMs;
 
   const [state, setState] = useState<RealtimeConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const connectionRef = useRef<RealtimeConnection | null>(null);
   const startedAtRef = useRef<string>('');
+  const partialItemRef = useRef<string | null>(null);
+  const partialTextRef = useRef<string>('');
   const sessionCodeRef = useRef<string>('');
   const deviceIdRef = useRef<string | undefined>(undefined);
   const userStoppedRef = useRef<boolean>(false);
@@ -35,7 +42,13 @@ export function useRealtimeWebRTC(opts: UseRealtimeWebRTCOptions = {}) {
   const handleMessage = useCallback(
     (event: unknown) => {
       if (!event || typeof event !== 'object') return;
-      const data = event as { type?: string; transcript?: string; delta?: string; item_id?: string; error?: { message?: string } };
+      const data = event as {
+        type?: string;
+        transcript?: string;
+        delta?: string;
+        item_id?: string;
+        error?: { message?: string; code?: string };
+      };
 
       switch (data.type) {
         case 'session.created':
@@ -47,10 +60,20 @@ export function useRealtimeWebRTC(opts: UseRealtimeWebRTCOptions = {}) {
           break;
         case 'conversation.item.input_audio_transcription.delta':
           if (data.delta) {
-            onDelta?.({ id: data.item_id ?? 'partial', text: data.delta });
+            // Deltas are incremental tokens, not the full transcript. Accumulate
+            // them per item so the live partial shows the whole sentence so far.
+            const itemId = data.item_id ?? 'partial';
+            if (partialItemRef.current !== itemId) {
+              partialItemRef.current = itemId;
+              partialTextRef.current = '';
+            }
+            partialTextRef.current += data.delta;
+            onDelta?.({ id: itemId, text: partialTextRef.current });
           }
           break;
         case 'conversation.item.input_audio_transcription.completed':
+          partialItemRef.current = null;
+          partialTextRef.current = '';
           if (data.transcript) {
             const endedAt = new Date().toISOString();
             onUtterance?.({
@@ -63,6 +86,9 @@ export function useRealtimeWebRTC(opts: UseRealtimeWebRTCOptions = {}) {
           }
           break;
         case 'error': {
+          // Committing a near-silent buffer is expected with client-side VAD;
+          // ignore it instead of surfacing a spurious error to the user.
+          if (data.error?.code === 'input_audio_buffer_commit_empty') break;
           const msg = data.error?.message ?? 'Unknown realtime error';
           setError(msg);
           setState('error');
@@ -91,6 +117,7 @@ export function useRealtimeWebRTC(opts: UseRealtimeWebRTCOptions = {}) {
       const conn = await connectRealtime({
         session,
         deviceId: deviceIdRef.current,
+        silenceMs: silenceMsRef.current,
         onOpen: () => setState('connected'),
         onClose: () => {
           connectionRef.current = null;
