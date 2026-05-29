@@ -1,0 +1,264 @@
+name: Deploy (build → push → roll)
+
+# Builds API + web images, pushes them to ACR, and rolls each Container App
+# revision to the new digest. Terraform owns infrastructure; this workflow
+# owns image rolls only. Run `infra.yml` first (or terraform apply
+# locally) to provision the cluster before invoking this workflow.
+#
+# === Required GitHub configuration ===
+#
+# Secrets (repo or environment scoped):
+#   AZURE_CLIENT_ID         — Entra app/UAMI client ID, federated to this repo
+#   AZURE_TENANT_ID         — Azure AD tenant ID
+#   AZURE_SUBSCRIPTION_ID   — target subscription
+#
+# Variables (Settings → Secrets and variables → Actions → Variables):
+#   AZURE_RESOURCE_GROUP    — e.g. rg-hoptx-prod
+#   ACR_LOGIN_SERVER        — e.g. crhoptxprod123456.azurecr.io
+#   API_APP_NAME            — e.g. ca-hoptx-prod-api
+#   WEB_APP_NAME            — e.g. ca-hoptx-prod-web
+#   API_URL                 — e.g. https://ca-hoptx-prod-api.<region>.azurecontainerapps.io
+#
+# Federation setup (one-time, on the deploy principal):
+#   az ad app federated-credential create --id <APP_ID> --parameters '{
+#     "name":"github-deploy","issuer":"https://token.actions.githubusercontent.com",
+#     "subject":"repo:<owner>/<repo>:ref:refs/heads/v2","audiences":["api://AzureADTokenExchange"]}'
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [v2, main]
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: 'Successful CI run URL or ID to deploy (required for manual deploys)'
+        type: string
+        required: false
+      trigger_source:
+        description: 'Who triggered this deploy'
+        type: choice
+        options: [manual, ci, infra]
+        default: manual
+        required: false
+      image_tag:
+        description: 'Image tag to push (defaults to short git SHA)'
+        type: string
+        required: false
+      components:
+        description: 'Which components to build'
+        type: choice
+        options: [both, api, web]
+        default: both
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+jobs:
+  resolve:
+    name: Resolve metadata
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+      build_api: ${{ steps.scope.outputs.build_api }}
+      build_web: ${{ steps.scope.outputs.build_web }}
+      checkout_ref: ${{ steps.source.outputs.checkout_ref }}
+    steps:
+      - id: source
+        name: Resolve deploy source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          event_name="${{ github.event_name }}"
+          trigger_source="${{ inputs.trigger_source || 'manual' }}"
+          ci_run_ref="${{ inputs.ci_run_id }}"
+
+          if [ "$event_name" = "workflow_run" ]; then
+            head_sha="${{ github.event.workflow_run.head_sha }}"
+            url="${{ github.event.workflow_run.html_url }}"
+            run_id="${{ github.event.workflow_run.id }}"
+            echo "Deploying successful CI run $run_id ($url) at $head_sha"
+            echo "checkout_ref=$head_sha" >> "$GITHUB_OUTPUT"
+          elif [ "$trigger_source" = "manual" ] || [ "$trigger_source" = "ci" ]; then
+            if [ -z "$ci_run_ref" ]; then
+              echo "::error::ci_run_id is required for $trigger_source deploys. Pass a successful CI run URL or ID."
+              exit 1
+            fi
+
+            ci_run_id="$(printf '%s' "$ci_run_ref" | sed -E 's#^.*/actions/runs/([0-9]+).*$#\1#')"
+            if ! printf '%s' "$ci_run_id" | grep -Eq '^[0-9]+$'; then
+              echo "::error::Invalid ci_run_id '$ci_run_ref'. Use a CI run URL or numeric run ID."
+              exit 1
+            fi
+
+            name="$(gh run view "$ci_run_id" --json name --jq '.name')"
+            conclusion="$(gh run view "$ci_run_id" --json conclusion --jq '.conclusion')"
+            head_sha="$(gh run view "$ci_run_id" --json headSha --jq '.headSha')"
+            url="$(gh run view "$ci_run_id" --json url --jq '.url')"
+
+            if [ "$name" != "CI" ]; then
+              echo "::error::Run $ci_run_id is '$name', not CI."
+              exit 1
+            fi
+            if [ "$conclusion" != "success" ]; then
+              echo "::error::CI run $ci_run_id has conclusion '$conclusion', not success."
+              exit 1
+            fi
+
+            echo "Deploying CI run $ci_run_id ($url) at $head_sha"
+            echo "checkout_ref=$head_sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "Deploying current workflow ref $GITHUB_SHA after infra apply"
+            echo "checkout_ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: tag
+        name: Compute image tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$(printf '%s' '${{ steps.source.outputs.checkout_ref }}' | cut -c1-12)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: scope
+        name: Decide which components to build
+        run: |
+          choice="${{ inputs.components || 'both' }}"
+          case "$choice" in
+            api)  echo "build_api=true"  >> "$GITHUB_OUTPUT"; echo "build_web=false" >> "$GITHUB_OUTPUT" ;;
+            web)  echo "build_api=false" >> "$GITHUB_OUTPUT"; echo "build_web=true"  >> "$GITHUB_OUTPUT" ;;
+            *)    echo "build_api=true"  >> "$GITHUB_OUTPUT"; echo "build_web=true"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  build-and-push:
+    name: Deploy · ${{ matrix.component.name }} image build + push
+    runs-on: ubuntu-latest
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - { name: api, context: api, repo: hoptranscribe-api, port: 8080 }
+          - { name: web, context: web, repo: hoptranscribe-web, port: 80 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.checkout_ref }}
+
+      - name: Skip if not in scope
+        id: skip
+        run: |
+          if [ "${{ matrix.component.name }}" = "api" ] && [ "${{ needs.resolve.outputs.build_api }}" = "false" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ matrix.component.name }}" = "web" ] && [ "${{ needs.resolve.outputs.build_web }}" = "false" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Azure login (OIDC)
+        if: steps.skip.outputs.skip == 'false'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR login
+        if: steps.skip.outputs.skip == 'false'
+        run: az acr login --name "${{ vars.ACR_LOGIN_SERVER }}"
+
+      - name: Set up Docker Buildx
+        if: steps.skip.outputs.skip == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      # Images are environment-agnostic: API_BASE_URL is injected at *container
+      # start* by web/docker-entrypoint.sh (rendered into /config.js, picked up
+      # by window.__APP_CONFIG__). No build-arg plumbing required here — the
+      # web Container App env var in Terraform drives it at runtime.
+      - name: Build and push ${{ matrix.component.name }} deploy image
+        if: steps.skip.outputs.skip == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.component.context }}
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.component.repo }}:${{ needs.resolve.outputs.image_tag }}
+            ${{ vars.ACR_LOGIN_SERVER }}/${{ matrix.component.repo }}:latest
+          cache-from: type=gha,scope=${{ matrix.component.name }}
+          cache-to: type=gha,scope=${{ matrix.component.name }},mode=max
+
+  roll:
+    name: Deploy · roll Container Apps
+    runs-on: ubuntu-latest
+    needs: [resolve, build-and-push]
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Roll API revision
+        if: needs.resolve.outputs.build_api == 'true'
+        run: |
+          az containerapp update \
+            --name "${{ vars.API_APP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ vars.ACR_LOGIN_SERVER }}/hoptranscribe-api:${{ needs.resolve.outputs.image_tag }}" \
+            --output none
+          echo "Rolled ${{ vars.API_APP_NAME }} to ${{ needs.resolve.outputs.image_tag }}"
+
+      - name: Roll Web revision
+        if: needs.resolve.outputs.build_web == 'true'
+        run: |
+          az containerapp update \
+            --name "${{ vars.WEB_APP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ vars.ACR_LOGIN_SERVER }}/hoptranscribe-web:${{ needs.resolve.outputs.image_tag }}" \
+            --output none
+          echo "Rolled ${{ vars.WEB_APP_NAME }} to ${{ needs.resolve.outputs.image_tag }}"
+
+  smoke-test:
+    name: Deploy · smoke test
+    runs-on: ubuntu-latest
+    needs: [resolve, roll]
+    steps:
+      - name: Wait for new revision to be live
+        run: sleep 30
+
+      - name: Probe /health/status
+        run: |
+          set -e
+          url="${{ vars.API_URL }}/health/status"
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i: $url"
+            if curl --silent --show-error --fail --max-time 10 "$url"; then
+              echo "API healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "API failed health check after 5 attempts"
+          exit 1
+
+      - name: Probe web index
+        run: |
+          set -e
+          url="$(echo "${{ vars.API_URL }}" | sed 's|api|web|')"
+          # Fallback if WEB_URL var is set, prefer it
+          if [ -n "${{ vars.WEB_URL }}" ]; then url="${{ vars.WEB_URL }}"; fi
+          curl --silent --show-error --fail --max-time 10 --output /dev/null "$url"
+          echo "Web reachable at $url"

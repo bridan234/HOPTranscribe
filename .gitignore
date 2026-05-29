@@ -69,4 +69,21 @@ appsettings.Development.json
 **/override.tf.json
 **/*_override.tf
 **/*_override.tf.json
-docs/application-insights-queries.md
+
+# API runtime artifacts (NOT the Data/ source folder — that holds the
+# DbContext, entities, and migrations and MUST be tracked). macOS's
+# case-insensitive filesystem makes broad "api/data/" rules dangerous.
+api/Data/*.db
+api/Data/*.db-shm
+api/Data/*.db-wal
+api/Data/sessions.db*
+api/logs/
+
+# Test artifacts
+api.tests/TestResults/
+**/TestResults/
+
+# Vite/TS incremental build outputs
+**/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts

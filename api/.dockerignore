@@ -1,0 +1,8 @@
+bin/
+obj/
+logs/
+data/
+*.user
+*.suo
+.vs/
+.idea/

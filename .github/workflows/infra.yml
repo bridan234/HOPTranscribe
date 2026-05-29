@@ -1,0 +1,213 @@
+name: Infra (terraform plan/apply)
+
+# Runs terraform plan or apply against infra/azure. Manual only.
+#
+# === Required GitHub configuration ===
+#
+# Secrets:
+#   AZURE_CLIENT_ID
+#   AZURE_TENANT_ID
+#   AZURE_SUBSCRIPTION_ID
+#   OPENAI_API_KEY               — value passed as -var openai_api_key=...
+#   SUPABASE_DB_HOST             — Supabase Postgres host (db.<ref>.supabase.co)
+#   SUPABASE_DB_PASSWORD         — Supabase Postgres password
+#   SUPABASE_DB_USER             — optional, defaults to 'postgres'
+#   SUPABASE_DB_NAME             — optional, defaults to 'postgres'
+#   SUPABASE_DB_PORT             — optional, defaults to 5432
+#
+# Variables:
+#   TF_BACKEND_RESOURCE_GROUP    — RG holding the tfstate storage account
+#   TF_BACKEND_STORAGE_ACCOUNT   — storage account name (globally unique)
+#   TF_BACKEND_CONTAINER         — blob container, e.g. tfstate
+#   TF_BACKEND_KEY               — state blob name, e.g. v2-prod.tfstate
+#   TF_VAR_NAME_PREFIX           — e.g. hoptx
+#   TF_VAR_ENV                   — prod | stage | dev
+#   TF_VAR_LOCATION              — e.g. eastus
+#   TF_VAR_ALLOWED_ORIGINS       — comma-separated origins
+#
+# One-time bootstrap (run locally before first workflow execution):
+#   az group create -n <rg> -l <loc>
+#   az storage account create -n <sa> -g <rg> -l <loc> --sku Standard_LRS --kind StorageV2
+#   az storage container create -n tfstate --account-name <sa> --auth-mode login
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        type: choice
+        options: [plan, apply, destroy]
+        required: true
+        default: plan
+      image_tag:
+        description: 'Image tag to pin in apply (defaults to latest)'
+        type: string
+        required: false
+        default: 'latest'
+      auto_approve:
+        description: 'Auto-approve apply/destroy (DANGEROUS)'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: infra
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+jobs:
+  terraform:
+    name: terraform ${{ inputs.action }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/azure
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.5'
+          terraform_wrapper: false
+
+      # Generate a backend stanza on the fly so local development can keep using
+      # local state (no backend block committed). Filename ends in _override.tf
+      # so Terraform merges it on top of versions.tf.
+      - name: Write azurerm backend override
+        run: |
+          cat > backend_override.tf <<'EOF'
+          terraform {
+            backend "azurerm" {}
+          }
+          EOF
+
+      - name: terraform init
+        env:
+          ARM_USE_OIDC: 'true'
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ vars.TF_BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TF_BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.TF_BACKEND_CONTAINER }}" \
+            -backend-config="key=${{ vars.TF_BACKEND_KEY }}" \
+            -backend-config="use_oidc=true"
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform plan
+        if: inputs.action == 'plan'
+        env:
+          ARM_USE_OIDC: 'true'
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          TF_VAR_name_prefix: ${{ vars.TF_VAR_NAME_PREFIX }}
+          TF_VAR_env: ${{ vars.TF_VAR_ENV }}
+          TF_VAR_location: ${{ vars.TF_VAR_LOCATION }}
+          TF_VAR_allowed_origins: ${{ vars.TF_VAR_ALLOWED_ORIGINS }}
+          TF_VAR_image_tag: ${{ inputs.image_tag }}
+          TF_VAR_db_host: ${{ secrets.SUPABASE_DB_HOST }}
+          TF_VAR_db_password: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          TF_VAR_db_user: ${{ secrets.SUPABASE_DB_USER }}
+          TF_VAR_db_name: ${{ secrets.SUPABASE_DB_NAME }}
+          TF_VAR_db_port: ${{ secrets.SUPABASE_DB_PORT }}
+        run: terraform plan -input=false -no-color -out=plan.tfplan
+
+      - name: Upload plan artifact
+        if: inputs.action == 'plan'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}
+          path: infra/azure/plan.tfplan
+          retention-days: 14
+
+      - name: terraform apply
+        if: inputs.action == 'apply'
+        env:
+          ARM_USE_OIDC: 'true'
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          TF_VAR_name_prefix: ${{ vars.TF_VAR_NAME_PREFIX }}
+          TF_VAR_env: ${{ vars.TF_VAR_ENV }}
+          TF_VAR_location: ${{ vars.TF_VAR_LOCATION }}
+          TF_VAR_allowed_origins: ${{ vars.TF_VAR_ALLOWED_ORIGINS }}
+          TF_VAR_image_tag: ${{ inputs.image_tag }}
+          TF_VAR_db_host: ${{ secrets.SUPABASE_DB_HOST }}
+          TF_VAR_db_password: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          TF_VAR_db_user: ${{ secrets.SUPABASE_DB_USER }}
+          TF_VAR_db_name: ${{ secrets.SUPABASE_DB_NAME }}
+          TF_VAR_db_port: ${{ secrets.SUPABASE_DB_PORT }}
+        run: |
+          if [ "${{ inputs.auto_approve }}" = "true" ]; then
+            terraform apply -input=false -auto-approve
+          else
+            terraform plan -input=false -out=plan.tfplan
+            terraform apply -input=false plan.tfplan
+          fi
+
+      - name: terraform destroy
+        if: inputs.action == 'destroy'
+        env:
+          ARM_USE_OIDC: 'true'
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          TF_VAR_name_prefix: ${{ vars.TF_VAR_NAME_PREFIX }}
+          TF_VAR_env: ${{ vars.TF_VAR_ENV }}
+          TF_VAR_location: ${{ vars.TF_VAR_LOCATION }}
+          TF_VAR_allowed_origins: ${{ vars.TF_VAR_ALLOWED_ORIGINS }}
+          TF_VAR_image_tag: ${{ inputs.image_tag }}
+          TF_VAR_db_host: ${{ secrets.SUPABASE_DB_HOST }}
+          TF_VAR_db_password: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          TF_VAR_db_user: ${{ secrets.SUPABASE_DB_USER }}
+          TF_VAR_db_name: ${{ secrets.SUPABASE_DB_NAME }}
+          TF_VAR_db_port: ${{ secrets.SUPABASE_DB_PORT }}
+        run: |
+          if [ "${{ inputs.auto_approve }}" = "true" ]; then
+            terraform destroy -input=false -auto-approve
+          else
+            echo "::error::destroy requires auto_approve=true (safety check)"
+            exit 1
+          fi
+
+      - name: Surface outputs
+        if: inputs.action == 'apply'
+        run: |
+          echo "## Terraform outputs" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          terraform output >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trigger deploy after successful apply
+        if: inputs.action == 'apply'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run "Deploy (build → push → roll)" \
+            --ref "${{ github.ref_name }}" \
+            -f trigger_source=infra \
+            -f image_tag="${{ inputs.image_tag }}" \
+            -f components=both

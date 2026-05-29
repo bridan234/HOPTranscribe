@@ -1,60 +1,59 @@
 services:
-  # be API
-  be:
+  api:
     build:
-      context: ./src/be
+      context: ./api
       dockerfile: Dockerfile
-    container_name: hoptranscribe-api
+    container_name: hoptranscribe-v2-api
     ports:
       - "5001:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
       - OpenAI__ApiKey=${OPENAI_API_KEY}
-      - OpenAI__TimeoutSeconds=30
-      - OpenAI__Voice=alloy
+      - Jwt__SigningKey=${JWT_SIGNING_KEY}
+      - ConnectionStrings__SessionDb=Data Source=/data/sessions.db
       - AllowedOrigins__0=http://localhost:3000
+      - AllowedOrigins__1=http://localhost:3001
+      - AllowedOrigins__2=http://localhost:5173
+      - AllowedOrigins__3=http://127.0.0.1:3000
+      - AllowedOrigins__4=http://127.0.0.1:3001
+      - AllowedOrigins__5=http://127.0.0.1:5173
+      - APPLICATIONINSIGHTS_CONNECTION_STRING=${APPLICATIONINSIGHTS_CONNECTION_STRING:-}
     volumes:
-      - be-logs:/app/logs
-      - be-data:/data
+      - api-data:/data
+      - api-logs:/app/logs
     networks:
-      - hoptranscribe-network
+      - hoptranscribe-v2
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/status || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 30s
 
-  # fe React App
-  fe:
+  web:
     build:
-      context: ./src/fe
+      context: ./web
       dockerfile: Dockerfile
-    container_name: hoptranscribe-web
-    ports:
-      - "3000:80"
+    container_name: hoptranscribe-v2-web
     environment:
-      - VITE_API_BASE_URL=http://localhost:5001
+      - API_BASE_URL=${API_BASE_URL:-http://localhost:5001}
+    ports:
+      - "${WEB_PORT:-3000}:80"
     depends_on:
-      be:
+      api:
         condition: service_healthy
     networks:
-      - hoptranscribe-network
+      - hoptranscribe-v2
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
 networks:
-  hoptranscribe-network:
+  hoptranscribe-v2:
     driver: bridge
 
 volumes:
-  be-logs:
+  api-data:
     driver: local
-  be-data:
+  api-logs:
     driver: local

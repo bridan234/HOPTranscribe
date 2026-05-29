@@ -1,175 +1,199 @@
-# Project Configuration
-variable "project_name" {
-  description = "Project name used for resource naming"
+variable "name_prefix" {
+  description = "Short name prefix for all resources (3-12 chars, lowercase, no hyphens preferred for global-name resources)."
   type        = string
-  default     = "hoptranscribe"
-}
-
-variable "environment" {
-  description = "Environment (dev, staging, prod)"
-  type        = string
-  default     = "dev"
+  default     = "hoptx"
 
   validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "Environment must be dev, staging, or prod."
+    condition     = can(regex("^[a-z][a-z0-9]{2,11}$", var.name_prefix))
+    error_message = "name_prefix must be 3-12 chars, start with a letter, and contain only lowercase letters and digits."
+  }
+}
+
+variable "env" {
+  description = "Environment short name (prod, stage, dev)."
+  type        = string
+  default     = "prod"
+
+  validation {
+    condition     = contains(["prod", "stage", "dev"], var.env)
+    error_message = "env must be one of prod, stage, dev."
   }
 }
 
 variable "location" {
-  description = "Azure region for resources"
+  description = "Azure region for all resources."
   type        = string
-  default     = "canadacentral"
+  default     = "eastus"
 }
 
 variable "tags" {
-  description = "Tags to apply to all resources"
+  description = "Tags applied to all resources."
   type        = map(string)
   default = {
-    Project   = "HOPTranscribe"
-    ManagedBy = "Terraform"
+    application = "HOPTranscribe"
+    managedBy   = "terraform"
+    component   = "v2"
   }
 }
 
-# Docker Hub Configuration
-variable "dockerhub_username" {
-  description = "Docker Hub username"
-  type        = string
-  default     = "bridan"
-}
-
-variable "dockerhub_token" {
-  description = "Docker Hub access token or password (sensitive)"
-  type        = string
-  sensitive   = true
-}
-
-# Logging
 variable "log_retention_days" {
-  description = "Log Analytics retention in days (must be 7 or between 30-730)"
+  description = "Log Analytics workspace retention in days."
   type        = number
   default     = 30
-
-  validation {
-    condition     = var.log_retention_days == 7 || (var.log_retention_days >= 30 && var.log_retention_days <= 730)
-    error_message = "Log retention must be either 7 days (free tier) or between 30-730 days (paid retention)."
-  }
 }
 
-# Backend Configuration
-variable "backend_image_name" {
-  description = "Backend container image name"
-  type        = string
-  default     = "hoptranscribe-backend"
-}
-
-variable "backend_min_replicas" {
-  description = "Minimum number of backend replicas"
-  type        = number
-  default     = 0
-
-  validation {
-    condition     = var.backend_min_replicas >= 0 && var.backend_min_replicas <= 30
-    error_message = "Min replicas must be between 0 and 30."
-  }
-}
-
-variable "backend_max_replicas" {
-  description = "Maximum number of backend replicas"
-  type        = number
-  default     = 2
-
-  validation {
-    condition     = var.backend_max_replicas >= 1 && var.backend_max_replicas <= 30
-    error_message = "Max replicas must be between 1 and 30."
-  }
-}
-
-variable "backend_cpu" {
-  description = "CPU cores for backend container (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0)"
-  type        = number
-  default     = 0.5
-}
-
-variable "backend_memory" {
-  description = "Memory for backend container (e.g., 0.5Gi, 1Gi, 2Gi)"
-  type        = string
-  default     = "1Gi"
-}
-
-# Frontend Configuration
-variable "frontend_image_name" {
-  description = "Frontend container image name"
-  type        = string
-  default     = "hoptranscribe-frontend"
-}
-
-variable "frontend_min_replicas" {
-  description = "Minimum number of frontend replicas"
-  type        = number
-  default     = 0
-
-  validation {
-    condition     = var.frontend_min_replicas >= 0 && var.frontend_min_replicas <= 30
-    error_message = "Min replicas must be between 0 and 30."
-  }
-}
-
-variable "frontend_max_replicas" {
-  description = "Maximum number of frontend replicas"
-  type        = number
-  default     = 2
-
-  validation {
-    condition     = var.frontend_max_replicas >= 1 && var.frontend_max_replicas <= 30
-    error_message = "Max replicas must be between 1 and 30."
-  }
-}
-
-variable "frontend_cpu" {
-  description = "CPU cores for frontend container"
-  type        = number
-  default     = 0.5
-}
-
-variable "frontend_memory" {
-  description = "Memory for frontend container"
-  type        = string
-  default     = "1Gi"
-}
-
-# OpenAI Configuration
 variable "openai_api_key" {
-  description = "OpenAI API key (sensitive)"
+  description = "OpenAI API key (stored in Key Vault)."
   type        = string
   sensitive   = true
 }
 
-variable "openai_voice" {
-  description = "OpenAI voice model"
+variable "jwt_signing_key" {
+  description = "JWT HS256 signing key. If null, a 64-char random key is generated and stored in Key Vault."
   type        = string
-  default     = "alloy"
+  sensitive   = true
+  default     = null
 }
 
-# Storage Configuration
-variable "storage_account_replication" {
-  description = "Storage account replication type (LRS, GRS, RAGRS, ZRS)"
+variable "matching_model" {
+  description = "Primary OpenAI matching model."
   type        = string
-  default     = "LRS"
-
-  validation {
-    condition     = contains(["LRS", "GRS", "RAGRS", "ZRS", "GZRS", "RAGZRS"], var.storage_account_replication)
-    error_message = "Must be one of: LRS, GRS, RAGRS, ZRS, GZRS, RAGZRS."
-  }
+  default     = "gpt-5-mini"
 }
 
-variable "sessions_db_quota_gb" {
-  description = "File share quota in GB for sessions database"
+variable "matching_fallback_model" {
+  description = "Fallback model if matching_model is unavailable."
+  type        = string
+  default     = "gpt-4o-mini"
+}
+
+variable "realtime_model" {
+  description = "OpenAI realtime transcription model."
+  type        = string
+  default     = "gpt-realtime-whisper"
+}
+
+variable "api_image_repository" {
+  description = "Image repository name in ACR for the API."
+  type        = string
+  default     = "hoptranscribe-api"
+}
+
+variable "web_image_repository" {
+  description = "Image repository name in ACR for the web frontend."
+  type        = string
+  default     = "hoptranscribe-web"
+}
+
+variable "image_tag" {
+  description = "Tag pushed to both API and web images during deploy."
+  type        = string
+  default     = "latest"
+}
+
+variable "allowed_origins" {
+  description = "Comma-separated list of origins allowed by API CORS (e.g. https://app.example.com). The web container app's default URL is added automatically."
+  type        = string
+  default     = ""
+}
+
+variable "api_cpu" {
+  description = "vCPU per API replica."
   type        = number
-  default     = 10
+  default     = 0.5
+}
 
-  validation {
-    condition     = var.sessions_db_quota_gb >= 1 && var.sessions_db_quota_gb <= 102400
-    error_message = "Quota must be between 1 and 102400 GB."
-  }
+variable "api_memory" {
+  description = "Memory per API replica (e.g. 1Gi)."
+  type        = string
+  default     = "1Gi"
+}
+
+variable "api_min_replicas" {
+  description = "Min replicas for the API container app."
+  type        = number
+  default     = 0
+}
+
+variable "api_max_replicas" {
+  description = "Max replicas for the API container app."
+  type        = number
+  default     = 1
+}
+
+variable "web_cpu" {
+  description = "vCPU per web replica."
+  type        = number
+  default     = 0.25
+}
+
+variable "web_memory" {
+  description = "Memory per web replica."
+  type        = string
+  default     = "0.5Gi"
+}
+
+variable "web_min_replicas" {
+  description = "Min replicas for the web container app."
+  type        = number
+  default     = 0
+}
+
+variable "web_max_replicas" {
+  description = "Max replicas for the web container app."
+  type        = number
+  default     = 1
+}
+
+variable "key_vault_authorized_object_ids" {
+  description = "Additional Entra object IDs (users/groups/SPNs) granted Key Vault Secrets Officer for operations like rotating secrets."
+  type        = list(string)
+  default     = []
+}
+
+variable "db_host" {
+  description = "Postgres host. For Supabase: db.<project-ref>.supabase.co. Threaded in from the SUPABASE_DB_HOST GitHub secret."
+  type        = string
+}
+
+variable "db_port" {
+  description = "Postgres port. Supabase direct = 5432 (required for migrations and session-level features), pooler = 6543."
+  type        = number
+  default     = 5432
+}
+
+variable "db_user" {
+  description = "Postgres user. Supabase default = postgres."
+  type        = string
+  default     = "postgres"
+}
+
+variable "db_password" {
+  description = "Postgres password. Threaded in from the SUPABASE_DB_PASSWORD GitHub secret."
+  type        = string
+  sensitive   = true
+}
+
+variable "db_name" {
+  description = "Postgres database name. Supabase default = postgres."
+  type        = string
+  default     = "postgres"
+}
+
+variable "keepalive_enabled" {
+  description = "Create a scheduled Container Apps job that touches the API daily so Supabase does not pause for inactivity."
+  type        = bool
+  default     = true
+}
+
+variable "keepalive_cron_expression" {
+  description = "Cron expression for the Supabase keepalive Container Apps job. Uses Container Apps cron semantics."
+  type        = string
+  default     = "17 8 * * *"
+}
+
+variable "keepalive_image" {
+  description = "Container image used by the Supabase keepalive job."
+  type        = string
+  default     = "curlimages/curl:latest"
 }

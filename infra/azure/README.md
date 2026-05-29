@@ -1,301 +1,152 @@
-# Azure Infrastructure - Terraform
+# HOPTranscribe v2 — Azure Terraform
 
-This directory contains Terraform configurations for deploying HOPTranscribe to Azure Container Apps.
+Production Azure deploy for the v2 split-stage transcription stack. Single
+Terraform root that provisions:
 
-## 📁 Files
+- Resource group
+- Azure Container Registry (Basic, AcrPull via UAMI — no admin user)
+- User-assigned Managed Identity (UAMI) shared by both Container Apps for
+  ACR pull and Key Vault Secrets User
+- Key Vault (RBAC-authorized) with `openai-api-key` and `jwt-signing-key`
+- Storage Account + Azure Files share (`sqlite`, 5 GiB) for the API's
+  SQLite database, mounted at `/data` in the API container
+- Log Analytics workspace + workspace-based Application Insights
+- Azure Container Apps environment (consumption profile)
+- API Container App (port 8080) with health probes and persistent volume
+- Web Container App (nginx on port 80) consuming the API FQDN at build time
 
-- `main.tf` - Main infrastructure resources
-- `variables.tf` - Input variables and validation
-- `outputs.tf` - Output values after deployment
-- `terraform.tfvars.example` - Example configuration file
+```
+                                  ┌────────────────────────────────┐
+                                  │  Container Apps environment     │
+                                  │                                 │
+  Browser ── HTTPS ──► ca-web ───►│  ca-api ── /data ── Azure Files │
+                       (nginx)    │                                 │
+                                  │  └─► OpenAI (key from KV)       │
+                                  └────────────────────────────────┘
+                                          │                │
+                                  Log Analytics       Key Vault
+                                  + App Insights      (UAMI: Secrets User)
+```
 
-## 🚀 Quick Start
+## Prerequisites
 
-### Prerequisites
+- Terraform ≥ 1.5
+- Azure CLI logged in: `az login` then `az account set -s <subscription>`
+- The deploying principal needs `Owner` (or `Contributor` + `User Access
+  Administrator`) on the target subscription so it can create RBAC role
+  assignments (ACR pull, Key Vault Secrets User, Secrets Officer for self).
+- Docker (for building the images)
 
-1. **Azure CLI** installed and authenticated
-2. **Terraform** >= 1.0 installed
-3. **OpenAI API Key**
-
-### 1. Configure Variables
+## 1. Provision infra
 
 ```bash
-# Copy example config
+cd infra/azure
 cp terraform.tfvars.example terraform.tfvars
-
-# Edit terraform.tfvars with your values
-nano terraform.tfvars
-```
-
-### 2. Set OpenAI API Key (Secure Method)
-
-**Option A: Environment Variable (Recommended)**
-```bash
-export TF_VAR_openai_api_key="sk-proj-your-key-here"
-```
-
-**Option B: Pass via CLI**
-```bash
-terraform apply -var="openai_api_key=sk-proj-your-key-here"
-```
-
-### 3. Initialize Terraform
-
-```bash
+# edit terraform.tfvars and set at minimum: openai_api_key
 terraform init
+terraform plan -out plan.tfplan
+terraform apply plan.tfplan
 ```
 
-### 4. Plan Deployment
+On the very first apply, Container Apps will try to pull `hoptranscribe-api:latest`
+and `hoptranscribe-web:latest` from the empty registry and the deployment
+will fail because the images don't exist yet. You have two options:
+
+### Option A — build & push first, apply second (recommended)
+
+1. `terraform apply -target=azurerm_container_registry.this` to create the
+   registry only.
+2. Build and push images (see below).
+3. `terraform apply` to deploy everything.
+
+### Option B — let the first apply fail, then push and apply again
+
+1. `terraform apply` (Container App creation fails — that's fine, ACR is up).
+2. Build and push images.
+3. `terraform apply` again — Container Apps will roll healthy.
+
+## 2. Build and push images
 
 ```bash
-terraform plan
+ACR=$(terraform output -raw acr_name)
+TAG=$(terraform output -raw api_image_reference | awk -F: '{print $NF}')
+
+az acr login --name "$ACR"
+
+# API
+docker build --platform linux/amd64 -t "$ACR.azurecr.io/hoptranscribe-api:$TAG" ../../api
+docker push "$ACR.azurecr.io/hoptranscribe-api:$TAG"
+
+# Web — pass the API URL at build time so the bundle hard-codes it
+API_URL=$(terraform output -raw api_url)
+docker build --platform linux/amd64 \
+  --build-arg VITE_API_BASE_URL="$API_URL" \
+  -t "$ACR.azurecr.io/hoptranscribe-web:$TAG" ../../web
+docker push "$ACR.azurecr.io/hoptranscribe-web:$TAG"
 ```
 
-### 5. Apply Configuration
+> The `Dockerfile`s for both services already exist under `v2/api/` and
+> `v2/web/`. The web `Dockerfile` accepts a `VITE_API_BASE_URL` build arg
+> so the bundle is locked to the API origin.
+
+## 3. Roll a new revision
+
+Because we set `ignore_changes = [template[0].container[0].image]`, you can
+push a new tag and roll without a `terraform apply`:
 
 ```bash
-terraform apply
+NEW_TAG=$(git rev-parse --short HEAD)
+docker build --platform linux/amd64 -t "$ACR.azurecr.io/hoptranscribe-api:$NEW_TAG" ../../api
+docker push "$ACR.azurecr.io/hoptranscribe-api:$NEW_TAG"
+
+az containerapp update \
+  --name $(terraform output -raw api_image_reference | awk -F/ '{print $NF}' | awk -F: '{print $1}') \
+  --resource-group $(terraform output -raw resource_group_name) \
+  --image "$ACR.azurecr.io/hoptranscribe-api:$NEW_TAG"
 ```
 
-Review the plan and type `yes` to confirm.
+To re-pin the tag in Terraform (so a future `apply` won't drift), update
+`image_tag` in `terraform.tfvars` to `$NEW_TAG`.
 
-### 6. Get Outputs
+## 4. CORS / custom domains
+
+`allowed_origins` is a comma-separated list passed straight into the API's
+`Cors:AllowedOrigins` setting. After the first apply you can read the web
+FQDN and add it (or your custom domain) to that list:
 
 ```bash
-terraform output
-
-# Specific output
-terraform output frontend_url
-terraform output backend_url
+WEB_URL=$(terraform output -raw web_url)
+terraform apply -var "allowed_origins=$WEB_URL,https://app.example.com"
 ```
 
-## 📊 Resource Overview
+## 5. Secrets
 
-This Terraform configuration creates:
+- `openai_api_key` and `jwt_signing_key` live in Key Vault and are mounted
+  into the API as Container App secrets via the UAMI (no key data passes
+  through Container Apps configuration in plain text).
+- Rotating: update the Key Vault secret version, then either bounce the
+  revision (`az containerapp revision restart`) or push a new image tag.
+  Because the secret reference is versionless, Container Apps re-resolves
+  it on each replica start.
 
-- ✅ Resource Group
-- ✅ Azure Container Registry (ACR)
-- ✅ Log Analytics Workspace
-- ✅ Container Apps Environment
-- ✅ Backend Container App (API)
-- ✅ Frontend Container App (Web UI)
+## 6. Cost notes (rough, eastus, monthly)
 
-## ⚙️ Configuration Options
+- Container Apps: ~$0/idle (consumption, scales to 0 if `min_replicas=0`),
+  ~$15–30 at `min_replicas=1` for the two apps combined.
+- ACR Basic: $5
+- Log Analytics: $2–10 depending on volume
+- App Insights: included in LA workspace pricing
+- Storage (Azure Files SMB, 5 GiB hot, LRS): <$1
+- Key Vault: ~$0.03 per 10K ops
+- **Total floor:** ~$25/mo at low traffic, OpenAI costs dominate.
 
-### Environment Types
-
-**Development (dev)**:
-```hcl
-environment          = "dev"
-backend_min_replicas = 0  # Scale to zero
-backend_max_replicas = 2
-acr_sku             = "Basic"
-```
-
-**Staging (staging)**:
-```hcl
-environment          = "staging"
-backend_min_replicas = 1
-backend_max_replicas = 3
-acr_sku             = "Standard"
-```
-
-**Production (prod)**:
-```hcl
-environment          = "prod"
-backend_min_replicas = 2  # Always available
-backend_max_replicas = 5
-acr_sku             = "Premium"
-```
-
-### Scaling Configuration
-
-**Backend**:
-- `backend_min_replicas`: 0-30 (0 enables scale-to-zero)
-- `backend_max_replicas`: 1-30
-- `backend_cpu`: 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0
-- `backend_memory`: "0.5Gi", "1Gi", "2Gi", "4Gi"
-
-**Frontend**:
-- `frontend_min_replicas`: 0-30
-- `frontend_max_replicas`: 1-30
-- `frontend_cpu`: 0.25 - 2.0
-- `frontend_memory`: "0.5Gi", "1Gi", "2Gi"
-
-### Cost Optimization
-
-**Development (Low Cost)**:
-```hcl
-backend_min_replicas = 0
-backend_cpu         = 0.5
-backend_memory      = "1Gi"
-frontend_min_replicas = 0
-frontend_cpu        = 0.25
-frontend_memory     = "0.5Gi"
-```
-**Est. Cost**: ~$15-25/month
-
-**Production (High Availability)**:
-```hcl
-backend_min_replicas = 2
-backend_cpu         = 1.0
-backend_memory      = "2Gi"
-frontend_min_replicas = 2
-frontend_cpu        = 0.5
-frontend_memory     = "1Gi"
-```
-**Est. Cost**: ~$50-80/month
-
-## 🔐 Security Best Practices
-
-### 1. Never Commit Secrets
-
-```bash
-# Add to .gitignore
-echo "terraform.tfvars" >> .gitignore
-echo "*.tfvars" >> .gitignore
-echo ".terraform/" >> .gitignore
-```
-
-### 2. Use Environment Variables
-
-```bash
-export TF_VAR_openai_api_key="your-key"
-export ARM_CLIENT_ID="..."
-export ARM_CLIENT_SECRET="..."
-export ARM_SUBSCRIPTION_ID="..."
-export ARM_TENANT_ID="..."
-```
-
-### 3. Use Remote State (Production)
-
-```hcl
-# In main.tf
-terraform {
-  backend "azurerm" {
-    resource_group_name  = "terraform-state-rg"
-    storage_account_name = "tfstate"
-    container_name       = "tfstate"
-    key                  = "hoptranscribe.tfstate"
-  }
-}
-```
-
-## 📦 Common Commands
-
-```bash
-# Initialize
-terraform init
-
-# Validate configuration
-terraform validate
-
-# Plan changes
-terraform plan
-
-# Apply changes
-terraform apply
-
-# Show current state
-terraform show
-
-# List resources
-terraform state list
-
-# Get specific output
-terraform output backend_url
-
-# Destroy all resources
-terraform destroy
-
-# Format code
-terraform fmt
-
-# Import existing resource
-terraform import azurerm_resource_group.main /subscriptions/.../resourceGroups/...
-```
-
-## 🔄 Updating Infrastructure
-
-### Update Container Images
-
-Images are pulled from ACR with `:latest` tag. To update:
-
-1. Build and push new images to ACR
-2. Run `terraform apply` to trigger update
-3. Container Apps will perform rolling update
-
-### Change Configuration
-
-```bash
-# Edit terraform.tfvars
-nano terraform.tfvars
-
-# Preview changes
-terraform plan
-
-# Apply changes
-terraform apply
-```
-
-## 🧹 Cleanup
-
-### Destroy All Resources
+## 7. Destroying
 
 ```bash
 terraform destroy
 ```
 
-⚠️ **Warning**: This will delete all resources including data!
-
-### Destroy Specific Resources
-
-```bash
-terraform destroy -target=azurerm_container_app.frontend
-```
-
-## 🐛 Troubleshooting
-
-### Authentication Issues
-
-```bash
-# Login to Azure
-az login
-
-# Set subscription
-az account set --subscription "Your Subscription Name"
-
-# Verify
-az account show
-```
-
-### State Lock Issues
-
-```bash
-# Force unlock (if lock is stale)
-terraform force-unlock <LOCK_ID>
-```
-
-### Resource Already Exists
-
-```bash
-# Import existing resource
-terraform import azurerm_resource_group.main /subscriptions/{sub-id}/resourceGroups/{rg-name}
-```
-
-### Plan Shows Unwanted Changes
-
-```bash
-# Refresh state
-terraform refresh
-
-# Check drift
-terraform plan -refresh-only
-```
-
-## 📚 Additional Resources
-
-- [Azure Container Apps Terraform Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app)
-- [Terraform Azure Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)
-- [Azure Container Apps Pricing](https://azure.microsoft.com/pricing/details/container-apps/)
-- [Terraform Best Practices](https://www.terraform.io/docs/cloud/guides/recommended-practices/index.html)
+Key Vault has `purge_soft_delete_on_destroy = true` (see `versions.tf`), so
+secret names are reusable on the next apply. The Storage account file share
+is deleted with the account — back it up first if you care about session
+history.
