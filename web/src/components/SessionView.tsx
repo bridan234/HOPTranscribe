@@ -11,6 +11,7 @@ import { useScriptureMatcher } from '@/hooks/useScriptureMatcher';
 import { useSessionHub } from '@/hooks/useSessionHub';
 import { useSettings } from '@/hooks/useSettings';
 import { sessionService } from '@/services/sessionService';
+import { STORAGE_KEYS } from '@/constants/apiConstants';
 import type { SessionDto, TranscriptSegmentDto } from '@/types/api';
 
 export type ScrollTarget = { id: string; nonce: number } | null;
@@ -29,6 +30,51 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
   const [partial, setPartial] = useState('');
   const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  // Segment ids whose scripture-match request is still in flight.
+  const [matchingIds, setMatchingIds] = useState<Set<string>>(new Set());
+
+  // Resizable split between the transcript and scripture panels (% width of the
+  // left/transcript panel), persisted across sessions.
+  const splitRef = useRef<HTMLDivElement>(null);
+  const [leftPct, setLeftPct] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.splitPct);
+      const n = raw ? Number(raw) : NaN;
+      if (Number.isFinite(n)) return Math.min(80, Math.max(25, n));
+    } catch {
+      /* ignore */
+    }
+    return 64;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.splitPct, String(leftPct));
+    } catch {
+      /* ignore */
+    }
+  }, [leftPct]);
+
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      const el = splitRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      setLeftPct(Math.min(80, Math.max(25, pct)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  }, []);
   // `nonce` lets repeated clicks on the same segment re-trigger the scroll effect.
   const [transcriptScrollTarget, setTranscriptScrollTarget] = useState<ScrollTarget>(null);
   const [refScrollTarget, setRefScrollTarget] = useState<ScrollTarget>(null);
@@ -113,6 +159,7 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
       ]);
 
       let matches: TranscriptSegmentDto['matches'] = [];
+      setMatchingIds((prev) => new Set(prev).add(tempId));
       try {
         const result = await requestMatches(text);
         // Keep at most `matchCount` references per transcript segment.
@@ -122,6 +169,12 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
         }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Match request failed.');
+      } finally {
+        setMatchingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(tempId);
+          return next;
+        });
       }
 
       try {
@@ -202,31 +255,50 @@ export function SessionView({ session: initialSession, username, onBack }: Sessi
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-4 grid gap-4 md:grid-cols-3">
-        <div className="md:col-span-2 h-[70vh]">
-          <TranscriptionPanel
-            segments={segments}
-            partialText={partial}
-            autoScroll={settings.autoScroll}
-            isLive={realtime.state === 'recording'}
-            hoveredSegmentId={hoveredSegmentId}
-            selectedSegmentId={selectedSegmentId}
-            scrollTarget={transcriptScrollTarget}
-            onSegmentHover={setHoveredSegmentId}
-            onSegmentClick={focusFromTranscript}
-          />
-        </div>
-        <div className="h-[70vh]">
-          <ScriptureReferences
-            segments={segments}
-            showConfidence={settings.showConfidence}
-            minConfidence={settings.minConfidence}
-            hoveredSegmentId={hoveredSegmentId}
-            selectedSegmentId={selectedSegmentId}
-            scrollTarget={refScrollTarget}
-            onSegmentHover={setHoveredSegmentId}
-            onSegmentClick={focusFromReference}
-          />
+      <main className="flex-1 container mx-auto px-4 py-4">
+        <div
+          ref={splitRef}
+          style={{ '--left-width': `${leftPct}%` } as React.CSSProperties}
+          className="flex flex-col gap-4 md:h-[72vh] md:flex-row md:gap-0"
+        >
+          <div className="h-[70vh] md:h-full md:w-[var(--left-width)] md:min-w-0">
+            <TranscriptionPanel
+              segments={segments}
+              partialText={partial}
+              autoScroll={settings.autoScroll}
+              isLive={realtime.state === 'recording'}
+              loadingSegmentIds={matchingIds}
+              minConfidence={settings.minConfidence}
+              hoveredSegmentId={hoveredSegmentId}
+              selectedSegmentId={selectedSegmentId}
+              scrollTarget={transcriptScrollTarget}
+              onSegmentHover={setHoveredSegmentId}
+              onSegmentClick={focusFromTranscript}
+            />
+          </div>
+
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={startResize}
+            className="group hidden shrink-0 items-center justify-center md:flex md:w-4 md:cursor-col-resize"
+            title="Drag to resize"
+          >
+            <span className="h-16 w-px rounded bg-border transition-colors group-hover:bg-indigo-400" />
+          </div>
+
+          <div className="h-[70vh] md:h-full md:min-w-0 md:flex-1">
+            <ScriptureReferences
+              segments={segments}
+              showConfidence={settings.showConfidence}
+              minConfidence={settings.minConfidence}
+              hoveredSegmentId={hoveredSegmentId}
+              selectedSegmentId={selectedSegmentId}
+              scrollTarget={refScrollTarget}
+              onSegmentHover={setHoveredSegmentId}
+              onSegmentClick={focusFromReference}
+            />
+          </div>
         </div>
       </main>
     </div>

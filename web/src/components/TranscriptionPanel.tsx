@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { AlignLeft } from 'lucide-react';
+import { AlignLeft, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { TranscriptSegmentDto } from '@/types/api';
@@ -17,6 +17,8 @@ interface TranscriptionPanelProps {
   partialText?: string;
   autoScroll?: boolean;
   isLive?: boolean;
+  loadingSegmentIds?: Set<string>;
+  minConfidence?: number;
   hoveredSegmentId?: string | null;
   selectedSegmentId?: string | null;
   scrollTarget?: ScrollTarget;
@@ -29,6 +31,8 @@ export function TranscriptionPanel({
   partialText,
   autoScroll = true,
   isLive = false,
+  loadingSegmentIds,
+  minConfidence = 0,
   hoveredSegmentId = null,
   selectedSegmentId = null,
   scrollTarget = null,
@@ -37,10 +41,18 @@ export function TranscriptionPanel({
 }: TranscriptionPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
+  // Whether the view is parked at the top. We only auto-scroll while pinned, so
+  // the user can freely scroll down to read/click older segments mid-recording.
+  const pinnedRef = useRef(true);
 
-  // Newest segment renders at the top, so keep the scroll pinned to the top.
+  const handleScroll = () => {
+    const el = ref.current;
+    if (el) pinnedRef.current = el.scrollTop <= 8;
+  };
+
+  // Newest segment renders at the top; keep it in view only when still pinned.
   useEffect(() => {
-    if (autoScroll && ref.current) {
+    if (autoScroll && pinnedRef.current && ref.current) {
       ref.current.scrollTop = 0;
     }
   }, [segments, partialText, autoScroll]);
@@ -73,7 +85,7 @@ export function TranscriptionPanel({
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden">
-        <div ref={ref} className="h-full space-y-1.5 overflow-y-auto pr-2">
+        <div ref={ref} onScroll={handleScroll} className="h-full space-y-1.5 overflow-y-auto pr-2">
           {segments.length === 0 && !partialText && (
             <p className="text-sm text-muted-foreground">
               Start recording to see live transcription here.
@@ -89,6 +101,10 @@ export function TranscriptionPanel({
           )}
           {ordered.map((seg, index) => {
             const highlighted = seg.id === hoveredSegmentId || seg.id === selectedSegmentId;
+            const isMatching = loadingSegmentIds?.has(seg.id) ?? false;
+            // Count only matches that clear the current confidence threshold, so
+            // the badge always agrees with what the scripture panel shows.
+            const visibleMatches = seg.matches.filter((m) => m.confidence >= minConfidence).length;
             return (
               <div
                 key={seg.id}
@@ -115,16 +131,25 @@ export function TranscriptionPanel({
                   {formatTime(seg.startedAt)}
                 </span>
                 <p className="flex-1 text-sm leading-relaxed text-foreground">{seg.text}</p>
-                {seg.matches.length > 0 && (
+                {isMatching ? (
                   <span
-                    className={cn(
-                      'mt-0.5 shrink-0 select-none rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none',
-                      highlighted ? 'bg-indigo-100 text-indigo-600' : 'bg-muted text-muted-foreground',
-                    )}
-                    title={`${seg.matches.length} scripture match${seg.matches.length > 1 ? 'es' : ''}`}
+                    className="mt-0.5 flex shrink-0 items-center gap-1 text-[10px] font-medium text-indigo-500"
+                    title="Finding scripture matches…"
                   >
-                    {seg.matches.length}
+                    <Loader2 className="h-3 w-3 animate-spin" />
                   </span>
+                ) : (
+                  visibleMatches > 0 && (
+                    <span
+                      className={cn(
+                        'mt-0.5 shrink-0 select-none rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+                        highlighted ? 'bg-indigo-100 text-indigo-600' : 'bg-muted text-muted-foreground',
+                      )}
+                      title={`${visibleMatches} scripture match${visibleMatches > 1 ? 'es' : ''}`}
+                    >
+                      {visibleMatches}
+                    </span>
+                  )
                 )}
               </div>
             );

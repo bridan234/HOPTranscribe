@@ -122,8 +122,13 @@ function MatchRow({ match, showConfidence }: { match: ScriptureMatchDto; showCon
   return (
     <div className="px-3 py-2.5">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-semibold uppercase tracking-wide text-indigo-600">
-          {match.reference}
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-sm font-semibold uppercase tracking-wide text-indigo-600">
+            {match.reference}
+          </span>
+          <span className="rounded border border-indigo-200 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-indigo-500">
+            {match.version}
+          </span>
         </span>
         {showConfidence && (
           <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-600">

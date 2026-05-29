@@ -55,6 +55,7 @@ export const STORAGE_KEYS = {
   minConfidence: 'hoptranscribe.v2.minConfidence',
   matchCount: 'hoptranscribe.v2.matchCount',
   silenceSeconds: 'hoptranscribe.v2.silenceSeconds',
+  splitPct: 'hoptranscribe.v2.splitPct',
 } as const;
 
 export const DEFAULTS = {
@@ -63,7 +64,7 @@ export const DEFAULTS = {
   matchCount: 3,
   minConfidence: 0.4,
   silenceSeconds: 1,
-  bibleVersions: ['NKJV', 'NIV', 'ESV', 'NLT', 'NASB', 'AMP', 'MSG', 'TPT'],
+  bibleVersions: ['Best Match', 'NKJV', 'NIV', 'ESV', 'NLT', 'NASB', 'AMP', 'MSG', 'TPT'],
 } as const;
 
 // Bounds for the silence gap that splits one utterance from the next.

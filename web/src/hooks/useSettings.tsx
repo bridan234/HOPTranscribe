@@ -49,8 +49,14 @@ function readBool(key: string, fallback: boolean): boolean {
 }
 
 function loadSettings(): AppSettings {
+  // Guard against stale/invalid versions left in localStorage by older builds
+  // (e.g. a removed "Best Match" option) being sent to the matcher.
+  const storedVersion = readString(STORAGE_KEYS.preferredVersion, defaultSettings.preferredVersion);
+  const preferredVersion = (DEFAULTS.bibleVersions as readonly string[]).includes(storedVersion)
+    ? storedVersion
+    : defaultSettings.preferredVersion;
   return {
-    preferredVersion: readString(STORAGE_KEYS.preferredVersion, defaultSettings.preferredVersion),
+    preferredVersion,
     minConfidence: readNumber(STORAGE_KEYS.minConfidence, defaultSettings.minConfidence),
     matchCount: readNumber(STORAGE_KEYS.matchCount, defaultSettings.matchCount),
     silenceSeconds: readNumber(STORAGE_KEYS.silenceSeconds, defaultSettings.silenceSeconds),
